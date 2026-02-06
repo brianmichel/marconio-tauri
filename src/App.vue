@@ -413,6 +413,16 @@ function stopPlayback() {
   isPlaying.value = false;
 }
 
+const modelMenuVisible = ref(false);
+
+function toggleModelMenu() {
+  modelMenuVisible.value = !modelMenuVisible.value;
+}
+
+function closeModelMenu() {
+  modelMenuVisible.value = false;
+}
+
 function closeContextMenu() {
   contextMenu.value.visible = false;
   contextMenu.value.slot = null;
@@ -618,10 +628,11 @@ function onGlobalKeyDown(event: KeyboardEvent) {
 
   if (event.key === "Escape") {
     closeContextMenu();
+    closeModelMenu();
     return;
   }
 
-  if (editable || event.repeat || contextMenu.value.visible) {
+  if (editable || event.repeat || contextMenu.value.visible || modelMenuVisible.value) {
     return;
   }
 
@@ -713,16 +724,29 @@ function onGlobalKeyDown(event: KeyboardEvent) {
         </article>
       </section>
 
-      <footer class="unit-footer">
+      <footer class="unit-footer" data-tauri-drag-region>
         <p class="tagline">STREAMING RECEIVER</p>
-        <div class="footer-controls">
-          <button type="button" class="footer-btn" :disabled="isLoading" @click="loadPlayableMedia">
-            {{ isLoading ? "SYNCING" : "REFRESH" }}
-          </button>
-          <button type="button" class="footer-btn" :disabled="!isPlaying" @click="stopPlayback">
-            STOP
-          </button>
-          <p class="model">MRC-1900</p>
+        <div class="model-wrap">
+          <button type="button" class="model" @click="toggleModelMenu">MRC-1900</button>
+          <div v-if="modelMenuVisible" class="model-backdrop" @mousedown="closeModelMenu" />
+          <div v-if="modelMenuVisible" class="model-menu" @mousedown.stop>
+            <button
+              type="button"
+              class="model-menu-item"
+              :disabled="isLoading"
+              @click="loadPlayableMedia(); closeModelMenu()"
+            >
+              {{ isLoading ? "SYNCING..." : "REFRESH" }}
+            </button>
+            <button
+              type="button"
+              class="model-menu-item"
+              :disabled="!isPlaying"
+              @click="stopPlayback(); closeModelMenu()"
+            >
+              STOP
+            </button>
+          </div>
         </div>
       </footer>
 
@@ -1341,7 +1365,8 @@ function onGlobalKeyDown(event: KeyboardEvent) {
 }
 
 .preset-button:focus-visible,
-.footer-btn:focus-visible,
+.model:focus-visible,
+.model-menu-item:focus-visible,
 .context-item:focus-visible {
   outline: 1px solid var(--theme-focus-outline);
   outline-offset: 1px;
@@ -1355,7 +1380,6 @@ function onGlobalKeyDown(event: KeyboardEvent) {
   color: #555e66;
   font-family: var(--display-font);
   letter-spacing: -0.01em;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
   transition: color 280ms ease;
 }
 
@@ -1365,13 +1389,12 @@ function onGlobalKeyDown(event: KeyboardEvent) {
 
 .slot-label {
   font-weight: 750;
-  font-size: 8px;
+  font-size: 10px;
   line-height: 1;
   letter-spacing: 0.08em;
   color: #555e66;
   text-transform: uppercase;
   font-family: var(--display-font);
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
   max-width: 90%;
   white-space: nowrap;
   overflow: hidden;
@@ -1409,73 +1432,104 @@ function onGlobalKeyDown(event: KeyboardEvent) {
 
 .tagline {
   margin: 0;
-  color: #9a9080;
-  font-style: italic;
-  font-weight: 700;
-  font-size: 9px;
-  letter-spacing: 0.075em;
-  font-family: "Times New Roman", Georgia, serif;
-  text-transform: uppercase;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
-}
-
-.footer-controls {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.footer-btn {
-  -webkit-appearance: none;
-  appearance: none;
-  border-radius: 3px;
-  border: 1px solid #2e3338;
-  background:
-    linear-gradient(180deg, #272b2f 0%, #1c1f22 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    0 1px 2px rgba(0, 0, 0, 0.35);
-  color: #b0b6bc;
-  font-size: 7px;
-  font-weight: 760;
-  padding: 3px 7px;
-  letter-spacing: 0.09em;
-  cursor: pointer;
-  text-transform: uppercase;
+  color: #6b6560;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 8px;
+  letter-spacing: 0.22em;
   font-family: var(--display-font);
-  transition:
-    box-shadow 60ms ease,
-    transform 60ms ease;
+  text-transform: uppercase;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-.footer-btn:active {
-  transform: translateY(0.5px);
-  box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, 0.3),
-    0 0 1px rgba(0, 0, 0, 0.3);
-}
-
-.footer-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
+.model-wrap {
+  position: relative;
 }
 
 .model {
+  -webkit-appearance: none;
+  appearance: none;
   margin: 0;
-  border: 1px solid #363b40;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-bottom-color: rgba(0, 0, 0, 0.25);
   background:
-    linear-gradient(180deg, #1e2124 0%, #181b1e 100%);
+    linear-gradient(180deg, #b8bcc0 0%, #8a8e92 40%, #9a9ea2 60%, #a8acb0 100%);
   box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, 0.2),
-    0 1px 0 rgba(255, 255, 255, 0.03);
-  color: #a0a8ae;
-  border-radius: 3px;
-  padding: 2px 7px;
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
+    0 1px 2px rgba(0, 0, 0, 0.3);
+  color: #2a2d30;
+  border-radius: 2px;
+  padding: 1px 6px;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.18em;
   font-family: var(--display-font);
+  font-size: 8px;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+}
+
+.model:active {
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.15),
+    0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.model-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+}
+
+.model-menu {
+  position: absolute;
+  bottom: calc(100% + 5px);
+  right: 0;
+  background:
+    linear-gradient(180deg, #2c3035 0%, #222629 100%);
+  border: 1px solid #3a3f44;
+  border-radius: 4px;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  padding: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 100;
+  min-width: 90px;
+}
+
+.model-menu-item {
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #b0b6bc;
   font-size: 10px;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  font-weight: 700;
+  padding: 5px 10px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  text-transform: uppercase;
+  font-family: var(--display-font);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.model-menu-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.model-menu-item:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.model-menu-item:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 audio {
