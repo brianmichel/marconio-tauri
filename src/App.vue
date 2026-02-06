@@ -168,6 +168,7 @@ const contextMenu = ref<{
   x: 0,
   y: 0,
 });
+const presetButtonRefs = ref<Record<number, HTMLButtonElement | null>>({});
 
 let controller: AbortController | null = null;
 
@@ -379,7 +380,11 @@ function closeContextMenu() {
   contextMenu.value.slot = null;
 }
 
-function openContextMenu(event: MouseEvent, slot: UserSlot) {
+function setPresetButtonRef(slot: number, element: unknown) {
+  presetButtonRefs.value[slot] = element instanceof HTMLButtonElement ? element : null;
+}
+
+function openContextMenuAt(slot: UserSlot, x: number, y: number) {
   const menuWidth = 210;
   const menuMaxHeight = 220;
   const padding = 6;
@@ -387,13 +392,28 @@ function openContextMenu(event: MouseEvent, slot: UserSlot) {
   contextMenu.value.slot = slot;
   contextMenu.value.x = Math.max(
     padding,
-    Math.min(event.clientX, window.innerWidth - menuWidth - padding),
+    Math.min(x, window.innerWidth - menuWidth - padding),
   );
   contextMenu.value.y = Math.max(
     padding,
-    Math.min(event.clientY, window.innerHeight - menuMaxHeight - padding),
+    Math.min(y, window.innerHeight - menuMaxHeight - padding),
   );
   contextMenu.value.visible = true;
+}
+
+function openContextMenu(event: MouseEvent, slot: UserSlot) {
+  openContextMenuAt(slot, event.clientX, event.clientY);
+}
+
+function openContextMenuForSlot(slot: UserSlot) {
+  const button = presetButtonRefs.value[slot];
+  if (button) {
+    const rect = button.getBoundingClientRect();
+    openContextMenuAt(slot, rect.left + rect.width / 2, rect.bottom + 6);
+    return;
+  }
+
+  openContextMenuAt(slot, window.innerWidth / 2, window.innerHeight / 2);
 }
 
 function assignSlotFromMenu(alias: string) {
@@ -440,6 +460,22 @@ function onPresetContextMenu(event: MouseEvent, slot: number, locked: boolean) {
   }
 
   openContextMenu(event, slot as UserSlot);
+}
+
+function onPresetHotkey(slot: number) {
+  const card = presetCards.value.find((item) => item.slot === slot);
+  if (!card) {
+    return;
+  }
+
+  if (card.playable) {
+    void startPlayback(card.playable, slot);
+    return;
+  }
+
+  if (!card.locked && slot >= 3 && slot <= 6) {
+    openContextMenuForSlot(slot as UserSlot);
+  }
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -514,6 +550,19 @@ function onGlobalKeyDown(event: KeyboardEvent) {
   const editable = isEditableTarget(event.target);
   const key = event.key.toLowerCase();
   const hasPrimaryModifier = event.metaKey || event.ctrlKey;
+  const shortcutSlot = Number(event.key);
+
+  if (
+    !editable &&
+    hasPrimaryModifier &&
+    Number.isInteger(shortcutSlot) &&
+    shortcutSlot >= 1 &&
+    shortcutSlot <= 6
+  ) {
+    event.preventDefault();
+    onPresetHotkey(shortcutSlot);
+    return;
+  }
 
   if (!editable && hasPrimaryModifier && BLOCKED_BROWSER_SHORTCUTS.has(key)) {
     event.preventDefault();
@@ -604,6 +653,7 @@ function onGlobalKeyDown(event: KeyboardEvent) {
           <button
             type="button"
             class="preset-button"
+            :ref="(el) => setPresetButtonRef(card.slot, el)"
             @click="onPresetPress(card.slot)"
             @contextmenu.prevent="onPresetContextMenu($event, card.slot, card.locked)"
           >
