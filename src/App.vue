@@ -10,10 +10,13 @@ import {
 
 const client = createNTSClient();
 const STORAGE_KEY = "nts-user-presets-v1";
+const LCD_THEME_KEY = "lcd-theme-v1";
 const USER_SLOTS = [3, 4, 5, 6] as const;
+const LCD_THEMES = ["amber", "blue", "green", "purpleRed"] as const;
 
 type UserSlot = (typeof USER_SLOTS)[number];
 type PresetAssignments = Record<UserSlot, string | null>;
+type LcdTheme = (typeof LCD_THEMES)[number];
 
 const channels = ref<MediaPlayable[]>([]);
 const mixtapes = ref<MediaPlayable[]>([]);
@@ -37,8 +40,10 @@ const subCols = ref(36);
 const metaCols = ref(45);
 const mainScrollPos = ref(0);
 const subScrollPos = ref(0);
+const isLcdThemeAnimating = ref(false);
 let mainScrollTimer: ReturnType<typeof setTimeout> | null = null;
 let subScrollTimer: ReturnType<typeof setTimeout> | null = null;
+let lcdThemeAnimationTimer: ReturnType<typeof setTimeout> | null = null;
 const BLOCKED_BROWSER_SHORTCUTS = new Set(["a", "r", "+", "=", "-", "0"]);
 const EDITABLE_TARGET_SELECTOR = [
   "input:not([readonly]):not([disabled])",
@@ -120,6 +125,34 @@ const lcdMetaText = computed(() => {
   return dsegClean(play + " " + status).padEnd(metaCols.value, "!");
 });
 
+function readLcdTheme(): LcdTheme {
+  try {
+    const stored = localStorage.getItem(LCD_THEME_KEY);
+    if (stored && LCD_THEMES.includes(stored as LcdTheme)) {
+      return stored as LcdTheme;
+    }
+  } catch {
+    // Ignore localStorage access errors and keep default theme.
+  }
+
+  return "amber";
+}
+
+function cycleLcdTheme() {
+  const currentIndex = LCD_THEMES.indexOf(lcdTheme.value);
+  lcdTheme.value = LCD_THEMES[(currentIndex + 1) % LCD_THEMES.length];
+  isLcdThemeAnimating.value = true;
+
+  if (lcdThemeAnimationTimer) {
+    clearTimeout(lcdThemeAnimationTimer);
+  }
+
+  lcdThemeAnimationTimer = setTimeout(() => {
+    isLcdThemeAnimating.value = false;
+    lcdThemeAnimationTimer = null;
+  }, 320);
+}
+
 function startMainScroll() {
   stopMainScroll();
   if (lcdPrimary.value.length <= mainCols.value) return;
@@ -199,6 +232,7 @@ function readAssignments(): PresetAssignments {
 }
 
 const assignments = ref<PresetAssignments>(readAssignments());
+const lcdTheme = ref<LcdTheme>(readLcdTheme());
 
 watch(
   assignments,
@@ -207,6 +241,10 @@ watch(
   },
   { deep: true },
 );
+
+watch(lcdTheme, (value) => {
+  localStorage.setItem(LCD_THEME_KEY, value);
+});
 
 const channelOne = computed(
   () =>
@@ -544,6 +582,10 @@ onBeforeUnmount(() => {
     audio.pause();
     audio.src = "";
   }
+  if (lcdThemeAnimationTimer) {
+    clearTimeout(lcdThemeAnimationTimer);
+    lcdThemeAnimationTimer = null;
+  }
 });
 
 function onGlobalKeyDown(event: KeyboardEvent) {
@@ -607,7 +649,7 @@ function onGlobalKeyDown(event: KeyboardEvent) {
 
 <template>
   <main class="scene">
-    <div class="unit">
+    <div class="unit" :class="`theme--${lcdTheme}`">
       <div
         class="drag-strip"
         data-tauri-drag-region
@@ -618,7 +660,13 @@ function onGlobalKeyDown(event: KeyboardEvent) {
         <p class="brand">MARCONIO</p>
       </header>
 
-      <section ref="lcdRef" class="lcd" aria-live="polite">
+      <section
+        ref="lcdRef"
+        class="lcd"
+        :class="{ 'lcd--theme-animating': isLcdThemeAnimating }"
+        aria-live="polite"
+        @click="cycleLcdTheme"
+      >
         <div class="lcd-row lcd-row--main" aria-hidden="true">
           <span v-for="i in mainCols" :key="i" class="lcd-cell">
             <span class="lcd-cell-ghost">~</span>
@@ -805,6 +853,25 @@ function onGlobalKeyDown(event: KeyboardEvent) {
     "Helvetica Neue",
     sans-serif;
   --lcd-font: "DSEG14", monospace;
+  --lcd-border: #7a4120;
+  --lcd-glow: rgba(255, 240, 210, 0.3);
+  --lcd-top: #c87848;
+  --lcd-mid: #a35a30;
+  --lcd-bottom: #8e4e28;
+  --lcd-shadow-strong: rgba(60, 20, 0, 0.3);
+  --lcd-shadow-soft: rgba(60, 20, 0, 0.1);
+  --lcd-ghost: rgba(55, 28, 10, 0.16);
+  --lcd-main-text: #3a1e0a;
+  --lcd-main-glow: rgba(40, 15, 0, 0.2);
+  --lcd-sub-glow: rgba(40, 15, 0, 0.15);
+  --lcd-meta-text: #5a301a;
+  --theme-accent-border: #8a5a30;
+  --theme-accent-soft: rgba(180, 120, 60, 0.08);
+  --theme-accent-outline: rgba(200, 140, 70, 0.25);
+  --theme-accent-glow: rgba(180, 120, 60, 0.12);
+  --theme-slot-active: #a08060;
+  --theme-slot-label-active: #8a7060;
+  --theme-focus-outline: #c68452;
 
   width: 100%;
   height: 100%;
@@ -902,21 +969,137 @@ function onGlobalKeyDown(event: KeyboardEvent) {
    ────────────────────────────────────────── */
 .lcd {
   border-radius: 4px;
-  border: 1px solid #7a4120;
+  border: 1px solid var(--lcd-border);
   background:
-    radial-gradient(120% 100% at 8% -10%, rgba(255, 240, 210, 0.3), transparent 50%),
-    linear-gradient(180deg, #c87848 0%, #a35a30 50%, #8e4e28 100%);
+    radial-gradient(120% 100% at 8% -10%, var(--lcd-glow), transparent 50%),
+    linear-gradient(180deg, var(--lcd-top) 0%, var(--lcd-mid) 50%, var(--lcd-bottom) 100%);
   padding: 8px 10px 6px;
   box-shadow:
     inset 0 2px 4px rgba(0, 0, 0, 0.15),
-    inset 0 -3px 8px rgba(60, 20, 0, 0.3),
-    inset 2px 0 6px rgba(60, 20, 0, 0.1),
-    inset -2px 0 6px rgba(60, 20, 0, 0.1),
+    inset 0 -3px 8px var(--lcd-shadow-strong),
+    inset 2px 0 6px var(--lcd-shadow-soft),
+    inset -2px 0 6px var(--lcd-shadow-soft),
     0 1px 0 rgba(255, 255, 255, 0.06),
     0 3px 12px rgba(0, 0, 0, 0.35);
   position: relative;
   z-index: 2;
   overflow: hidden;
+  cursor: pointer;
+  transition:
+    border-color 280ms ease,
+    box-shadow 280ms ease,
+    filter 140ms ease;
+}
+
+.lcd:hover {
+  filter: brightness(1.03);
+}
+
+.lcd--theme-animating {
+  animation: lcd-theme-swap 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes lcd-theme-swap {
+  0% {
+    transform: scale(1);
+    filter: saturate(0.95) brightness(0.98);
+  }
+  45% {
+    transform: scale(0.9975);
+    filter: saturate(1.25) brightness(1.08);
+  }
+  100% {
+    transform: scale(1);
+    filter: saturate(1) brightness(1);
+  }
+}
+
+.unit.theme--amber {
+  --lcd-border: #7a4120;
+  --lcd-glow: rgba(255, 240, 210, 0.3);
+  --lcd-top: #c87848;
+  --lcd-mid: #a35a30;
+  --lcd-bottom: #8e4e28;
+  --lcd-shadow-strong: rgba(60, 20, 0, 0.3);
+  --lcd-shadow-soft: rgba(60, 20, 0, 0.1);
+  --lcd-ghost: rgba(55, 28, 10, 0.16);
+  --lcd-main-text: #3a1e0a;
+  --lcd-main-glow: rgba(40, 15, 0, 0.2);
+  --lcd-sub-glow: rgba(40, 15, 0, 0.15);
+  --lcd-meta-text: #5a301a;
+  --theme-accent-border: #8a5a30;
+  --theme-accent-soft: rgba(180, 120, 60, 0.08);
+  --theme-accent-outline: rgba(200, 140, 70, 0.25);
+  --theme-accent-glow: rgba(180, 120, 60, 0.12);
+  --theme-slot-active: #a08060;
+  --theme-slot-label-active: #8a7060;
+  --theme-focus-outline: #c68452;
+}
+
+.unit.theme--blue {
+  --lcd-border: #2a5f89;
+  --lcd-glow: rgba(208, 236, 255, 0.3);
+  --lcd-top: #6ba6d8;
+  --lcd-mid: #4377ad;
+  --lcd-bottom: #2b567f;
+  --lcd-shadow-strong: rgba(17, 49, 76, 0.35);
+  --lcd-shadow-soft: rgba(17, 49, 76, 0.15);
+  --lcd-ghost: rgba(20, 45, 71, 0.18);
+  --lcd-main-text: #122b44;
+  --lcd-main-glow: rgba(8, 30, 55, 0.24);
+  --lcd-sub-glow: rgba(8, 30, 55, 0.2);
+  --lcd-meta-text: #1d3f62;
+  --theme-accent-border: #4a75b4;
+  --theme-accent-soft: rgba(77, 130, 194, 0.12);
+  --theme-accent-outline: rgba(108, 165, 233, 0.35);
+  --theme-accent-glow: rgba(108, 165, 233, 0.2);
+  --theme-slot-active: #8fb5e1;
+  --theme-slot-label-active: #7da7d8;
+  --theme-focus-outline: #7fb4ef;
+}
+
+.unit.theme--green {
+  --lcd-border: #3f6e2f;
+  --lcd-glow: rgba(224, 255, 214, 0.28);
+  --lcd-top: #8cca63;
+  --lcd-mid: #699f44;
+  --lcd-bottom: #4c7932;
+  --lcd-shadow-strong: rgba(27, 56, 16, 0.35);
+  --lcd-shadow-soft: rgba(27, 56, 16, 0.15);
+  --lcd-ghost: rgba(25, 49, 15, 0.18);
+  --lcd-main-text: #1e3c12;
+  --lcd-main-glow: rgba(15, 35, 8, 0.22);
+  --lcd-sub-glow: rgba(15, 35, 8, 0.18);
+  --lcd-meta-text: #2f5122;
+  --theme-accent-border: #5e8d45;
+  --theme-accent-soft: rgba(126, 186, 88, 0.12);
+  --theme-accent-outline: rgba(150, 220, 108, 0.33);
+  --theme-accent-glow: rgba(133, 201, 94, 0.2);
+  --theme-slot-active: #9ecf79;
+  --theme-slot-label-active: #8dc266;
+  --theme-focus-outline: #a6da7e;
+}
+
+.unit.theme--purpleRed {
+  --lcd-border: #7c2d57;
+  --lcd-glow: rgba(255, 214, 234, 0.3);
+  --lcd-top: #cb6897;
+  --lcd-mid: #a54778;
+  --lcd-bottom: #7a315a;
+  --lcd-shadow-strong: rgba(73, 18, 45, 0.35);
+  --lcd-shadow-soft: rgba(73, 18, 45, 0.15);
+  --lcd-ghost: rgba(63, 18, 39, 0.18);
+  --lcd-main-text: #4a1734;
+  --lcd-main-glow: rgba(52, 11, 30, 0.24);
+  --lcd-sub-glow: rgba(52, 11, 30, 0.2);
+  --lcd-meta-text: #662347;
+  --theme-accent-border: #a7487a;
+  --theme-accent-soft: rgba(193, 86, 142, 0.12);
+  --theme-accent-outline: rgba(220, 121, 173, 0.35);
+  --theme-accent-glow: rgba(212, 103, 160, 0.2);
+  --theme-slot-active: #d191b7;
+  --theme-slot-label-active: #c884ad;
+  --theme-focus-outline: #d98bb7;
 }
 
 /* LCD grain texture */
@@ -952,7 +1135,8 @@ function onGlobalKeyDown(event: KeyboardEvent) {
 /* Ghost: the ~ character sets cell width, shows unlit segments */
 .lcd-cell-ghost {
   visibility: visible;
-  color: rgba(55, 28, 10, 0.16);
+  color: var(--lcd-ghost);
+  transition: color 280ms ease;
 }
 
 /* Text: absolutely positioned on top of ghost, same size */
@@ -974,8 +1158,11 @@ function onGlobalKeyDown(event: KeyboardEvent) {
 }
 
 .lcd-row--main .lcd-cell-text {
-  color: #3a1e0a;
-  text-shadow: 0 0 3px rgba(40, 15, 0, 0.2);
+  color: var(--lcd-main-text);
+  text-shadow: 0 0 3px var(--lcd-main-glow);
+  transition:
+    color 280ms ease,
+    text-shadow 280ms ease;
 }
 
 /* Sub row: subtitle / show info */
@@ -986,8 +1173,11 @@ function onGlobalKeyDown(event: KeyboardEvent) {
 }
 
 .lcd-row--sub .lcd-cell-text {
-  color: #3a1e0a;
-  text-shadow: 0 0 2px rgba(40, 15, 0, 0.15);
+  color: var(--lcd-main-text);
+  text-shadow: 0 0 2px var(--lcd-sub-glow);
+  transition:
+    color 280ms ease,
+    text-shadow 280ms ease;
 }
 
 /* Meta row: status indicators */
@@ -1002,8 +1192,9 @@ function onGlobalKeyDown(event: KeyboardEvent) {
 }
 
 .lcd-row--meta .lcd-cell-text {
-  color: #5a301a;
+  color: var(--lcd-meta-text);
   opacity: 0.7;
+  transition: color 280ms ease;
 }
 
 /* ──────────────────────────────────────────
@@ -1034,15 +1225,18 @@ function onGlobalKeyDown(event: KeyboardEvent) {
   padding: 3px;
   display: flex;
   flex-direction: column;
+  transition:
+    border-color 280ms ease,
+    box-shadow 280ms ease;
 }
 
 .preset-card.active {
-  border-color: #8a5a30;
+  border-color: var(--theme-accent-border);
   box-shadow:
     inset 0 2px 4px rgba(0, 0, 0, 0.5),
-    inset 0 0 8px rgba(180, 120, 60, 0.08),
-    0 0 0 1px rgba(200, 140, 70, 0.25),
-    0 0 12px rgba(180, 120, 60, 0.12);
+    inset 0 0 8px var(--theme-accent-soft),
+    0 0 0 1px var(--theme-accent-outline),
+    0 0 12px var(--theme-accent-glow);
 }
 
 /* ──────────────────────────────────────────
@@ -1125,8 +1319,9 @@ function onGlobalKeyDown(event: KeyboardEvent) {
 .preset-button:focus-visible,
 .footer-btn:focus-visible,
 .context-item:focus-visible {
-  outline: 1px solid #c68452;
+  outline: 1px solid var(--theme-focus-outline);
   outline-offset: 1px;
+  transition: outline-color 280ms ease;
 }
 
 .slot-number {
@@ -1137,10 +1332,11 @@ function onGlobalKeyDown(event: KeyboardEvent) {
   font-family: var(--display-font);
   letter-spacing: -0.01em;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  transition: color 280ms ease;
 }
 
 .preset-card.active .slot-number {
-  color: #a08060;
+  color: var(--theme-slot-active);
 }
 
 .slot-label {
@@ -1157,10 +1353,11 @@ function onGlobalKeyDown(event: KeyboardEvent) {
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: center;
+  transition: color 280ms ease;
 }
 
 .preset-card.active .slot-label {
-  color: #8a7060;
+  color: var(--theme-slot-label-active);
 }
 
 .preset-card.empty .slot-number {
