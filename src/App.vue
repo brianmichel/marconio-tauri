@@ -150,7 +150,7 @@ function cycleLcdTheme() {
   lcdThemeAnimationTimer = setTimeout(() => {
     isLcdThemeAnimating.value = false;
     lcdThemeAnimationTimer = null;
-  }, 320);
+  }, 450);
 }
 
 function startMainScroll() {
@@ -996,22 +996,18 @@ function onGlobalKeyDown(event: KeyboardEvent) {
 }
 
 .lcd--theme-animating {
-  animation: lcd-theme-swap 320ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: lcd-flicker 450ms linear;
 }
 
-@keyframes lcd-theme-swap {
-  0% {
-    transform: scale(1);
-    filter: saturate(0.95) brightness(0.98);
-  }
-  45% {
-    transform: scale(0.9975);
-    filter: saturate(1.25) brightness(1.08);
-  }
-  100% {
-    transform: scale(1);
-    filter: saturate(1) brightness(1);
-  }
+@keyframes lcd-flicker {
+  0%   { filter: brightness(1) saturate(1); }
+  12%  { filter: brightness(0.82) saturate(0.7); }
+  22%  { filter: brightness(1.08) saturate(0.9); }
+  35%  { filter: brightness(0.75) saturate(0.6); }
+  50%  { filter: brightness(1.18) saturate(1.15); }
+  65%  { filter: brightness(1.1) saturate(1.06); }
+  82%  { filter: brightness(1.03) saturate(1.01); }
+  100% { filter: brightness(1) saturate(1); }
 }
 
 .unit.theme--amber {
