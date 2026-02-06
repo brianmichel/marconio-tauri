@@ -39,6 +39,14 @@ const mainScrollPos = ref(0);
 const subScrollPos = ref(0);
 let mainScrollTimer: ReturnType<typeof setTimeout> | null = null;
 let subScrollTimer: ReturnType<typeof setTimeout> | null = null;
+const BLOCKED_BROWSER_SHORTCUTS = new Set(["a", "r", "+", "=", "-", "0"]);
+const EDITABLE_TARGET_SELECTOR = [
+  "input:not([readonly]):not([disabled])",
+  "textarea:not([readonly]):not([disabled])",
+  '[contenteditable=""]',
+  '[contenteditable="true"]',
+  '[role="textbox"]',
+].join(", ");
 
 function measureCols() {
   const el = lcdRef.value;
@@ -434,6 +442,27 @@ function onPresetContextMenu(event: MouseEvent, slot: number, locked: boolean) {
   openContextMenu(event, slot as UserSlot);
 }
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  const element = target instanceof Element ? target : null;
+  if (!element) {
+    return false;
+  }
+
+  return element.closest(EDITABLE_TARGET_SELECTOR) !== null;
+}
+
+function preventBrowserContextMenu(event: MouseEvent) {
+  if (isEditableTarget(event.target)) {
+    return;
+  }
+
+  event.preventDefault();
+}
+
+function preventDocumentDrop(event: DragEvent) {
+  event.preventDefault();
+}
+
 async function startWindowDrag() {
   try {
     await getCurrentWindow().startDragging();
@@ -453,7 +482,10 @@ watch(lcdSecondary, () => {
 });
 
 onMounted(async () => {
-  window.addEventListener("keydown", onEscapeKeyDown);
+  window.addEventListener("keydown", onGlobalKeyDown);
+  window.addEventListener("contextmenu", preventBrowserContextMenu);
+  window.addEventListener("dragover", preventDocumentDrop);
+  window.addEventListener("drop", preventDocumentDrop);
   loadPlayableMedia();
   await document.fonts.ready;
   nextTick(() => {
@@ -464,7 +496,10 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("keydown", onEscapeKeyDown);
+  window.removeEventListener("keydown", onGlobalKeyDown);
+  window.removeEventListener("contextmenu", preventBrowserContextMenu);
+  window.removeEventListener("dragover", preventDocumentDrop);
+  window.removeEventListener("drop", preventDocumentDrop);
   controller?.abort();
   stopMainScroll();
   stopSubScroll();
@@ -475,9 +510,48 @@ onBeforeUnmount(() => {
   }
 });
 
-function onEscapeKeyDown(event: KeyboardEvent) {
+function onGlobalKeyDown(event: KeyboardEvent) {
+  const editable = isEditableTarget(event.target);
+  const key = event.key.toLowerCase();
+  const hasPrimaryModifier = event.metaKey || event.ctrlKey;
+
+  if (!editable && hasPrimaryModifier && BLOCKED_BROWSER_SHORTCUTS.has(key)) {
+    event.preventDefault();
+    return;
+  }
+
+  if (!editable && (event.key === "F5" || event.key === "F12")) {
+    event.preventDefault();
+    return;
+  }
+
   if (event.key === "Escape") {
     closeContextMenu();
+    return;
+  }
+
+  if (editable || event.repeat || contextMenu.value.visible) {
+    return;
+  }
+
+  if (event.code === "Space") {
+    event.preventDefault();
+
+    if (isPlaying.value) {
+      stopPlayback();
+      return;
+    }
+
+    if (currentPlayable.value && activeSlot.value !== null) {
+      void startPlayback(currentPlayable.value, activeSlot.value);
+    }
+
+    return;
+  }
+
+  if (event.key >= "1" && event.key <= "6") {
+    event.preventDefault();
+    onPresetPress(Number(event.key));
   }
 }
 </script>
@@ -625,12 +699,26 @@ function onEscapeKeyDown(event: KeyboardEvent) {
   width: 100%;
   height: 100%;
   margin: 0;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 :global(*),
 :global(*::before),
 :global(*::after) {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-drag: none;
+}
+
+:global(input),
+:global(textarea),
+:global([contenteditable=""]),
+:global([contenteditable="true"]) {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 :global(body) {
@@ -647,6 +735,7 @@ function onEscapeKeyDown(event: KeyboardEvent) {
 .scene {
   width: 100vw;
   height: 100vh;
+  cursor: default;
 }
 
 /* ──────────────────────────────────────────
@@ -724,6 +813,11 @@ function onEscapeKeyDown(event: KeyboardEvent) {
   right: 0;
   height: 28px;
   z-index: 10;
+  cursor: grab;
+}
+
+.drag-strip:active {
+  cursor: grabbing;
 }
 
 /* ──────────────────────────────────────────
@@ -972,6 +1066,13 @@ function onEscapeKeyDown(event: KeyboardEvent) {
     inset 0 1px 3px rgba(0, 0, 0, 0.4),
     inset 0 0 6px rgba(0, 0, 0, 0.15),
     0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.preset-button:focus-visible,
+.footer-btn:focus-visible,
+.context-item:focus-visible {
+  outline: 1px solid #c68452;
+  outline-offset: 1px;
 }
 
 .slot-number {
