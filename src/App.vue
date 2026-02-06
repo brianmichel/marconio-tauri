@@ -1,160 +1,258 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { onBeforeUnmount, onMounted, ref } from "vue";
+import {
+  createNTSClient,
+  playableFromChannel,
+  playableFromMixtape,
+  type MediaPlayable,
+} from "./nts";
 
-const greetMsg = ref("");
-const name = ref("");
+const client = createNTSClient();
+const channels = ref<MediaPlayable[]>([]);
+const mixtapes = ref<MediaPlayable[]>([]);
+const isLoading = ref(false);
+const errorMessage = ref<string | null>(null);
+const currentPlayable = ref<MediaPlayable | null>(null);
+const isPlaying = ref(false);
+const audioRef = ref<HTMLAudioElement | null>(null);
 
-async function greet() {
-  // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-  greetMsg.value = await invoke("greet", { name: name.value });
+let controller: AbortController | null = null;
+
+function log(message: string, extra?: unknown) {
+  if (typeof extra === "undefined") {
+    console.info(`[app] ${message}`);
+    return;
+  }
+  console.info(`[app] ${message}`, extra);
 }
+
+async function loadPlayableMedia() {
+  log("loadPlayableMedia start");
+  controller?.abort();
+  controller = new AbortController();
+
+  isLoading.value = true;
+  errorMessage.value = null;
+
+  try {
+    const [live, mixtapeData] = await Promise.all([
+      client.live({ signal: controller.signal }),
+      client.mixtapes({ signal: controller.signal }),
+    ]);
+    log("API requests completed", {
+      liveResults: live.results.length,
+      mixtapeResults: mixtapeData.results.length,
+    });
+
+    channels.value = live.results
+      .map(playableFromChannel)
+      .filter((item): item is MediaPlayable => item !== null);
+
+    mixtapes.value = mixtapeData.results.map(playableFromMixtape);
+    log("mapped playables", {
+      channels: channels.value.length,
+      mixtapes: mixtapes.value.length,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      log("load aborted");
+      return;
+    }
+
+    log("loadPlayableMedia failed", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    errorMessage.value = `Failed to load NTS streams: ${message}`;
+  } finally {
+    isLoading.value = false;
+    log("loadPlayableMedia end", { isLoading: isLoading.value });
+  }
+}
+
+async function startPlayback(playable: MediaPlayable) {
+  log("startPlayback", {
+    id: playable.id,
+    streamUrl: playable.streamUrl,
+  });
+  currentPlayable.value = playable;
+
+  const audio = audioRef.value;
+  if (!audio) {
+    return;
+  }
+
+  audio.src = playable.streamUrl;
+
+  try {
+    await audio.play();
+    isPlaying.value = true;
+    log("playback started");
+  } catch (error) {
+    log("playback failed", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    errorMessage.value = `Unable to start playback: ${message}`;
+    isPlaying.value = false;
+  }
+}
+
+function stopPlayback() {
+  const audio = audioRef.value;
+  if (!audio) {
+    return;
+  }
+
+  audio.pause();
+  isPlaying.value = false;
+  log("playback stopped");
+}
+
+onMounted(() => {
+  log("mounted");
+  loadPlayableMedia();
+});
+
+onBeforeUnmount(() => {
+  log("before unmount");
+  controller?.abort();
+  const audio = audioRef.value;
+  if (audio) {
+    audio.pause();
+    audio.src = "";
+  }
+});
 </script>
 
 <template>
-  <main class="container">
-    <h1>Hi Brian</h1>
+  <main class="app">
+    <header class="app-header">
+      <h1>NTS.live Player</h1>
+      <button type="button" :disabled="isLoading" @click="loadPlayableMedia">
+        {{ isLoading ? "Loading..." : "Refresh" }}
+      </button>
+    </header>
 
-    <div class="row">
-      <a href="https://vite.dev" target="_blank">
-        <img src="/vite.svg" class="logo vite" alt="Vite logo" />
-      </a>
-      <a href="https://tauri.app" target="_blank">
-        <img src="/tauri.svg" class="logo tauri" alt="Tauri logo" />
-      </a>
-      <a href="https://vuejs.org/" target="_blank">
-        <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-      </a>
-    </div>
-    <p>Click on the Tauri, Vite, and Vue logos to learn more.</p>
+    <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
 
-    <form class="row" @submit.prevent="greet">
-      <input id="greet-input" v-model="name" placeholder="Enter a name..." />
-      <button type="submit">Greet</button>
-    </form>
-    <p>{{ greetMsg }}</p>
+    <section class="now-playing" v-if="currentPlayable">
+      <img :src="currentPlayable.artworkUrl" :alt="currentPlayable.title" />
+      <div>
+        <h2>{{ currentPlayable.title }}</h2>
+        <p>{{ currentPlayable.subtitle }}</p>
+        <a :href="currentPlayable.pageUrl" target="_blank" rel="noreferrer">
+          Open on NTS.live
+        </a>
+      </div>
+      <button type="button" @click="stopPlayback" :disabled="!isPlaying">Stop</button>
+    </section>
+
+    <section>
+      <h2>Live Channels</h2>
+      <ul>
+        <li v-for="item in channels" :key="item.id">
+          <div>
+            <strong>{{ item.title }}</strong>
+            <p>{{ item.subtitle }}</p>
+          </div>
+          <button type="button" @click="startPlayback(item)">Play</button>
+        </li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Mixtapes</h2>
+      <ul>
+        <li v-for="item in mixtapes" :key="item.id">
+          <div>
+            <strong>{{ item.title }}</strong>
+            <p>{{ item.subtitle }}</p>
+          </div>
+          <button type="button" @click="startPlayback(item)">Play</button>
+        </li>
+      </ul>
+    </section>
+
+    <audio
+      ref="audioRef"
+      controls
+      preload="none"
+      @pause="isPlaying = false"
+      @play="isPlaying = true"
+    />
   </main>
 </template>
 
 <style scoped>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  color: #1f2937;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
 }
 
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #249b73);
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
-</style>
-<style>
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
+.error {
+  color: #b91c1c;
 }
 
-.container {
+.now-playing {
+  display: grid;
+  grid-template-columns: 140px 1fr auto;
+  gap: 1rem;
+  align-items: center;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+
+.now-playing img {
+  width: 140px;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+ul {
+  list-style: none;
+  padding: 0;
   margin: 0;
-  padding-top: 10vh;
+}
+
+li {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 0.75rem 0;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
-}
-
-h1 {
-  text-align: center;
-}
-
-input,
 button {
+  border: 1px solid #cbd5e1;
+  background: white;
   border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
+  padding: 0.5rem 0.85rem;
   cursor: pointer;
 }
 
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
-input,
-button {
-  outline: none;
+audio {
+  width: 100%;
+  margin-top: 1rem;
 }
 
-#greet-input {
-  margin-right: 5px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
-  }
-
-  a:hover {
-    color: #24c8db;
-  }
-
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
+@media (max-width: 720px) {
+  .now-playing {
+    grid-template-columns: 1fr;
   }
 }
-
 </style>
