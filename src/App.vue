@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   createNTSClient,
@@ -23,6 +23,131 @@ const currentPlayable = ref<MediaPlayable | null>(null);
 const activeSlot = ref<number | null>(null);
 const isPlaying = ref(false);
 const audioRef = ref<HTMLAudioElement | null>(null);
+
+// LCD character-cell display
+// ~ shows all 14 segments in DSEG14 (ghost/background segments)
+const MAIN_FONT_SIZE = 20;
+const SUB_FONT_SIZE = 10;
+const META_FONT_SIZE = 8;
+const SCROLL_GAP = 4; // blank cells between end and wrap
+
+const lcdRef = ref<HTMLElement | null>(null);
+const mainCols = ref(18);
+const subCols = ref(36);
+const metaCols = ref(45);
+const mainScrollPos = ref(0);
+const subScrollPos = ref(0);
+let mainScrollTimer: ReturnType<typeof setTimeout> | null = null;
+let subScrollTimer: ReturnType<typeof setTimeout> | null = null;
+
+function measureCols() {
+  const el = lcdRef.value;
+  if (!el) return;
+  const style = getComputedStyle(el);
+  const width =
+    el.clientWidth -
+    parseFloat(style.paddingLeft) -
+    parseFloat(style.paddingRight);
+
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  // Measure a run of characters to get accurate average width
+  const sample = "~~~~~~~~~~"; // 10 chars
+  ctx.font = `700 ${MAIN_FONT_SIZE}px DSEG14, monospace`;
+  const mainCharW = ctx.measureText(sample).width / sample.length;
+  if (mainCharW > 0) mainCols.value = Math.floor(width / mainCharW);
+
+  ctx.font = `700 ${SUB_FONT_SIZE}px DSEG14, monospace`;
+  const subCharW = ctx.measureText(sample).width / sample.length;
+  if (subCharW > 0) subCols.value = Math.floor(width / subCharW);
+
+  ctx.font = `700 ${META_FONT_SIZE}px DSEG14, monospace`;
+  const metaCharW = ctx.measureText(sample).width / sample.length;
+  if (metaCharW > 0) metaCols.value = Math.floor(width / metaCharW);
+}
+
+/**
+ * Clean text for DSEG14 rendering.
+ * Space → ! (full-width blank cell, keeps alignment with ghost ~)
+ * Colon → - (colons break the segment illusion)
+ */
+function dsegClean(text: string): string {
+  return text.replace(/ /g, "!").replace(/:/g, "-");
+}
+
+/** Extract a cols-wide window from text at the given offset, wrapping around. */
+function visibleSlice(text: string, cols: number, offset: number): string {
+  const cleaned = dsegClean(text);
+  if (!cleaned || cleaned.length <= cols) {
+    return (cleaned || "").padEnd(cols, "!");
+  }
+  const gap = "!".repeat(SCROLL_GAP);
+  const looped = cleaned + gap;
+  const total = looped.length;
+  const pos = offset % total;
+  let out = "";
+  for (let i = 0; i < cols; i++) {
+    out += looped[(pos + i) % total];
+  }
+  return out;
+}
+
+const lcdMainVisible = computed(() =>
+  visibleSlice(lcdPrimary.value, mainCols.value, mainScrollPos.value),
+);
+
+const lcdSubVisible = computed(() =>
+  visibleSlice(lcdSecondary.value, subCols.value, subScrollPos.value),
+);
+
+const lcdMetaText = computed(() => {
+  const play = isPlaying.value ? "PLAY" : "STOP";
+  const status = errorMessage.value
+    ? "FAULT"
+    : isLoading.value
+      ? "SYNC"
+      : "READY";
+  return dsegClean(play + " " + status).padEnd(metaCols.value, "!");
+});
+
+function startMainScroll() {
+  stopMainScroll();
+  if (lcdPrimary.value.length <= mainCols.value) return;
+  const total = lcdPrimary.value.length + SCROLL_GAP;
+  mainScrollTimer = setTimeout(function tick() {
+    mainScrollPos.value++;
+    // Pause when a full cycle completes
+    mainScrollTimer = setTimeout(tick, mainScrollPos.value % total === 0 ? 2500 : 250);
+  }, 2500);
+}
+
+function stopMainScroll() {
+  if (mainScrollTimer) {
+    clearTimeout(mainScrollTimer);
+    mainScrollTimer = null;
+  }
+  mainScrollPos.value = 0;
+}
+
+function startSubScroll() {
+  stopSubScroll();
+  if (lcdSecondary.value.length <= subCols.value) return;
+  const total = lcdSecondary.value.length + SCROLL_GAP;
+  subScrollTimer = setTimeout(function tick() {
+    subScrollPos.value++;
+    subScrollTimer = setTimeout(tick, subScrollPos.value % total === 0 ? 2500 : 200);
+  }, 2500);
+}
+
+function stopSubScroll() {
+  if (subScrollTimer) {
+    clearTimeout(subScrollTimer);
+    subScrollTimer = null;
+  }
+  subScrollPos.value = 0;
+}
 
 const contextMenu = ref<{
   visible: boolean;
@@ -114,7 +239,7 @@ const lcdPrimary = computed(() => {
   if (currentPlayable.value) {
     return currentPlayable.value.title.toUpperCase();
   }
-  return isLoading.value ? "TUNING RECEIVER" : "SELECT A PRESET";
+  return isLoading.value ? "TUNING..." : "NOT PLAYING";
 });
 
 const lcdSecondary = computed(() => {
@@ -130,7 +255,7 @@ const lcdSecondary = computed(() => {
     return "LIVE STREAM";
   }
 
-  return "NTS BROADCAST UNIT";
+  return "";
 });
 
 const presetCards = computed(() => {
@@ -248,8 +373,7 @@ function closeContextMenu() {
 
 function openContextMenu(event: MouseEvent, slot: UserSlot) {
   const menuWidth = 196;
-  const rowCount = mixtapeOptions.value.length + (assignments.value[slot] ? 1 : 0);
-  const menuHeight = Math.max(34, rowCount * 26 + 8);
+  const menuMaxHeight = 190;
   const padding = 6;
 
   contextMenu.value.slot = slot;
@@ -259,7 +383,7 @@ function openContextMenu(event: MouseEvent, slot: UserSlot) {
   );
   contextMenu.value.y = Math.max(
     padding,
-    Math.min(event.clientY, window.innerHeight - menuHeight - padding),
+    Math.min(event.clientY, window.innerHeight - menuMaxHeight - padding),
   );
   contextMenu.value.visible = true;
 }
@@ -318,14 +442,32 @@ async function startWindowDrag() {
   }
 }
 
-onMounted(() => {
+watch(lcdPrimary, () => {
+  stopMainScroll();
+  nextTick(startMainScroll);
+});
+
+watch(lcdSecondary, () => {
+  stopSubScroll();
+  nextTick(startSubScroll);
+});
+
+onMounted(async () => {
   window.addEventListener("keydown", onEscapeKeyDown);
   loadPlayableMedia();
+  await document.fonts.ready;
+  nextTick(() => {
+    measureCols();
+    startMainScroll();
+    startSubScroll();
+  });
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onEscapeKeyDown);
   controller?.abort();
+  stopMainScroll();
+  stopSubScroll();
   const audio = audioRef.value;
   if (audio) {
     audio.pause();
@@ -353,13 +495,24 @@ function onEscapeKeyDown(event: KeyboardEvent) {
         <p class="brand">MARCONIO</p>
       </header>
 
-      <section class="lcd" aria-live="polite">
-        <p class="lcd-main">{{ lcdPrimary }}</p>
-        <p class="lcd-sub">{{ lcdSecondary }}</p>
-        <div class="lcd-meta">
-          <span>{{ isPlaying ? "PLAY" : "STOP" }}</span>
-          <span v-if="errorMessage">FAULT</span>
-          <span v-else>{{ isLoading ? "SYNC" : "READY" }}</span>
+      <section ref="lcdRef" class="lcd" aria-live="polite">
+        <div class="lcd-row lcd-row--main" aria-hidden="true">
+          <span v-for="i in mainCols" :key="i" class="lcd-cell">
+            <span class="lcd-cell-ghost">~</span>
+            <span class="lcd-cell-text">{{ lcdMainVisible[i - 1] }}</span>
+          </span>
+        </div>
+        <div class="lcd-row lcd-row--sub" aria-hidden="true">
+          <span v-for="i in subCols" :key="i" class="lcd-cell">
+            <span class="lcd-cell-ghost">~</span>
+            <span class="lcd-cell-text">{{ lcdSubVisible[i - 1] }}</span>
+          </span>
+        </div>
+        <div class="lcd-row lcd-row--meta" aria-hidden="true">
+          <span v-for="i in metaCols" :key="i" class="lcd-cell">
+            <span class="lcd-cell-ghost">~</span>
+            <span class="lcd-cell-text">{{ lcdMetaText[i - 1] }}</span>
+          </span>
         </div>
       </section>
 
@@ -381,17 +534,8 @@ function onEscapeKeyDown(event: KeyboardEvent) {
             @contextmenu.prevent="onPresetContextMenu($event, card.slot, card.locked)"
           >
             <span class="slot-number">{{ card.slot }}</span>
-            <span class="slot-title">
-              {{ card.playable ? card.playable.title : card.locked ? "OFF AIR" : "ASSIGN" }}
-            </span>
-            <span class="slot-subtitle">
-              {{
-                card.locked
-                  ? "CH"
-                  : card.playable
-                    ? card.playable.subtitle || "MIXTAPE"
-                    : "RIGHT CLICK TO ASSIGN"
-              }}
+            <span class="slot-label">
+              {{ card.locked ? "CH" : card.playable ? card.playable.title.toUpperCase() : "+" }}
             </span>
           </button>
         </article>
@@ -426,15 +570,17 @@ function onEscapeKeyDown(event: KeyboardEvent) {
         @contextmenu.prevent
       >
         <p class="context-title">Preset {{ contextMenu.slot }}</p>
-        <button
-          v-for="option in mixtapeOptions"
-          :key="option.alias"
-          type="button"
-          class="context-item"
-          @click="assignSlotFromMenu(option.alias)"
-        >
-          {{ option.title }}
-        </button>
+        <div class="context-scroll">
+          <button
+            v-for="option in mixtapeOptions"
+            :key="option.alias"
+            type="button"
+            class="context-item"
+            @click="assignSlotFromMenu(option.alias)"
+          >
+            {{ option.title }}
+          </button>
+        </div>
         <button
           v-if="assignments[contextMenu.slot]"
           type="button"
@@ -449,6 +595,30 @@ function onEscapeKeyDown(event: KeyboardEvent) {
 </template>
 
 <style scoped>
+@font-face {
+  font-family: "DSEG14";
+  src: url("./assets/DSEG14Classic-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "DSEG14";
+  src: url("./assets/DSEG14Classic-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "DSEG14";
+  src: url("./assets/DSEG14Classic-Light.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
 :global(html),
 :global(body),
 :global(#app) {
@@ -479,6 +649,9 @@ function onEscapeKeyDown(event: KeyboardEvent) {
   height: 100vh;
 }
 
+/* ──────────────────────────────────────────
+   UNIT BODY — thick molded enclosure
+   ────────────────────────────────────────── */
 .unit {
   --ui-font:
     "SF Pro Text",
@@ -492,28 +665,56 @@ function onEscapeKeyDown(event: KeyboardEvent) {
     BlinkMacSystemFont,
     "Helvetica Neue",
     sans-serif;
-  --lcd-font: "SF Mono", Menlo, Monaco, "Courier New", monospace;
+  --lcd-font: "DSEG14", monospace;
 
   width: 100%;
   height: 100%;
-  box-sizing: border-box;
-  border-radius: 0;
-  border: 1px solid #626668;
+  border: 1px solid #4a4d50;
   background:
-    linear-gradient(170deg, rgba(255, 255, 255, 0.06), transparent 30%),
-    linear-gradient(180deg, #23272a 0%, #141619 100%);
+    linear-gradient(168deg, rgba(255, 255, 255, 0.07) 0%, transparent 22%),
+    linear-gradient(180deg, #2a2e32 0%, #1a1d21 38%, #111417 100%);
   box-shadow:
-    0 10px 24px rgba(0, 0, 0, 0.28),
-    inset 0 1px 1px rgba(255, 255, 255, 0.2),
-    inset 0 -8px 18px rgba(0, 0, 0, 0.35);
-  padding: 6px;
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.6),
+    inset 2px 0 6px rgba(0, 0, 0, 0.2),
+    inset -2px 0 6px rgba(0, 0, 0, 0.2),
+    inset 0 -12px 28px rgba(0, 0, 0, 0.4);
+  padding: 6px 8px 5px;
   color: #f2f2f2;
   position: relative;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   font-family: var(--ui-font);
+}
+
+/* subtle scan-line texture */
+.unit::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.012) 0,
+    rgba(255, 255, 255, 0.012) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  z-index: 1;
+}
+
+/* fine noise grain overlay */
+.unit::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 128px 128px;
+  z-index: 1;
 }
 
 .drag-strip {
@@ -522,30 +723,19 @@ function onEscapeKeyDown(event: KeyboardEvent) {
   left: 0;
   right: 0;
   height: 28px;
-  z-index: 7;
+  z-index: 10;
 }
 
-.unit::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0.016) 0,
-    rgba(255, 255, 255, 0.016) 1px,
-    transparent 1px,
-    transparent 3px
-  );
-}
-
+/* ──────────────────────────────────────────
+   HEADER
+   ────────────────────────────────────────── */
 .unit-header {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  min-height: 24px;
+  min-height: 22px;
   padding-left: 76px;
-  padding-right: 4px;
+  padding-right: 2px;
   position: relative;
   z-index: 8;
 }
@@ -554,205 +744,285 @@ function onEscapeKeyDown(event: KeyboardEvent) {
   margin: 0;
   font-size: 13px;
   font-weight: 800;
-  letter-spacing: 0.12em;
-  color: #e2e4e6;
+  letter-spacing: 0.14em;
+  color: #d4d6d8;
   font-family: var(--display-font);
   text-transform: uppercase;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.5),
+    0 -1px 0 rgba(255, 255, 255, 0.06);
 }
 
+/* ──────────────────────────────────────────
+   LCD DISPLAY — warm amber segmented screen
+   ────────────────────────────────────────── */
 .lcd {
-  border-radius: 5px;
-  border: 1px solid #8f4b22;
+  border-radius: 4px;
+  border: 1px solid #7a4120;
   background:
-    radial-gradient(140% 120% at 10% -20%, rgba(255, 243, 219, 0.26), transparent 48%),
-    linear-gradient(180deg, #cc7b4a 0%, #a15c33 100%);
-  padding: 6px 8px;
+    radial-gradient(120% 100% at 8% -10%, rgba(255, 240, 210, 0.3), transparent 50%),
+    linear-gradient(180deg, #c87848 0%, #a35a30 50%, #8e4e28 100%);
+  padding: 8px 10px 6px;
   box-shadow:
-    inset 0 0 14px rgba(38, 18, 5, 0.16),
-    inset 0 -5px 13px rgba(46, 19, 3, 0.3),
-    0 2px 10px rgba(0, 0, 0, 0.3);
+    inset 0 2px 4px rgba(0, 0, 0, 0.15),
+    inset 0 -3px 8px rgba(60, 20, 0, 0.3),
+    inset 2px 0 6px rgba(60, 20, 0, 0.1),
+    inset -2px 0 6px rgba(60, 20, 0, 0.1),
+    0 1px 0 rgba(255, 255, 255, 0.06),
+    0 3px 12px rgba(0, 0, 0, 0.35);
   position: relative;
   z-index: 2;
+  overflow: hidden;
 }
 
-.lcd-main,
-.lcd-sub {
-  margin: 0;
-  color: #2a221b;
-  text-shadow: 0 0 2px rgba(0, 0, 0, 0.14), 0 1px 0 rgba(255, 211, 177, 0.35);
+/* LCD grain texture */
+.lcd::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.06;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 128px 128px;
+  z-index: 0;
+}
+
+/* LCD row: holds fixed character cells */
+.lcd-row {
+  overflow: hidden;
+  white-space: nowrap;
   font-family: var(--lcd-font);
+  text-transform: uppercase;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+/* Individual character cell — fixed position, never moves */
+.lcd-cell {
+  display: inline-block;
+  position: relative;
+  text-align: center;
+  vertical-align: top;
+}
+
+/* Ghost: the ~ character sets cell width, shows unlit segments */
+.lcd-cell-ghost {
+  visibility: visible;
+  color: rgba(55, 28, 10, 0.16);
+}
+
+/* Text: absolutely positioned on top of ghost, same size */
+.lcd-cell-text {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+/* Main row: large title */
+.lcd-row--main {
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: 0.085em;
-  text-transform: uppercase;
 }
 
-.lcd-main {
-  font-size: 14px;
-  min-height: 1.3em;
-  line-height: 1.16;
-  font-weight: 800;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.lcd-row--main .lcd-cell-text {
+  color: #3a1e0a;
+  text-shadow: 0 0 3px rgba(40, 15, 0, 0.2);
 }
 
-.lcd-sub {
+/* Sub row: subtitle / show info */
+.lcd-row--sub {
+  font-size: 10px;
+  font-weight: 700;
+  margin-top: 1px;
+}
+
+.lcd-row--sub .lcd-cell-text {
+  color: #3a1e0a;
+  text-shadow: 0 0 2px rgba(40, 15, 0, 0.15);
+}
+
+/* Meta row: status indicators */
+.lcd-row--meta {
   font-size: 8px;
-  margin-top: 2px;
-  opacity: 0.84;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.lcd-meta {
+  font-weight: 700;
   margin-top: 3px;
-  display: flex;
-  gap: 8px;
-  font-size: 8px;
-  color: #3e3228;
-  font-weight: 800;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
 }
 
+.lcd-row--meta .lcd-cell-ghost {
+  opacity: 0.6;
+}
+
+.lcd-row--meta .lcd-cell-text {
+  color: #5a301a;
+  opacity: 0.7;
+}
+
+/* ──────────────────────────────────────────
+   PRESET GRID
+   ────────────────────────────────────────── */
 .preset-grid {
   flex: 1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
-  gap: 4px;
+  gap: 6px;
   min-height: 0;
   position: relative;
   z-index: 2;
 }
 
+/* ──────────────────────────────────────────
+   PRESET CARD — recessed well that holds the button
+   ────────────────────────────────────────── */
 .preset-card {
-  border-radius: 5px;
-  border: 1px solid #0d0f11;
-  background: linear-gradient(180deg, #0f1012 0%, #0a0b0d 100%);
+  border-radius: 6px;
+  border: 1px solid #0a0b0d;
+  background: linear-gradient(180deg, #080a0c 0%, #0d0f11 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
-    inset 0 8px 16px rgba(255, 255, 255, 0.02),
-    0 3px 10px rgba(0, 0, 0, 0.32);
-  padding: 2px;
+    inset 0 2px 4px rgba(0, 0, 0, 0.6),
+    inset 0 -1px 2px rgba(255, 255, 255, 0.03),
+    0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 3px;
   display: flex;
   flex-direction: column;
 }
 
 .preset-card.active {
-  border-color: #b17549;
+  border-color: #8a5a30;
   box-shadow:
-    inset 0 0 0 1px rgba(255, 214, 174, 0.1),
-    0 0 0 1px rgba(237, 165, 95, 0.3),
-    0 4px 12px rgba(0, 0, 0, 0.42);
+    inset 0 2px 4px rgba(0, 0, 0, 0.5),
+    inset 0 0 8px rgba(180, 120, 60, 0.08),
+    0 0 0 1px rgba(200, 140, 70, 0.25),
+    0 0 12px rgba(180, 120, 60, 0.12);
 }
 
+/* ──────────────────────────────────────────
+   PRESET BUTTON — raised 3D physical button
+   ────────────────────────────────────────── */
 .preset-button {
+  -webkit-appearance: none;
+  appearance: none;
   width: 100%;
-  border: 0;
-  border-radius: 4px;
+  flex: 1;
   min-height: 0;
-  height: 58px;
-  color: #c7cbce;
-  background: linear-gradient(155deg, #272a2d 0%, #141618 64%, #101214 100%);
+  border: none;
+  border-radius: 4px;
+  color: #656e76;
+  background:
+    linear-gradient(180deg,
+      #2c3035 0%,
+      #222629 30%,
+      #1a1d20 70%,
+      #141618 100%
+    );
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
-    inset 0 1px 8px rgba(255, 255, 255, 0.03);
+    /* top bevel highlight */
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    /* left/right edge highlights */
+    inset 1px 0 0 rgba(255, 255, 255, 0.04),
+    inset -1px 0 0 rgba(255, 255, 255, 0.04),
+    /* bottom inner shadow */
+    inset 0 -2px 3px rgba(0, 0, 0, 0.25),
+    /* raised shadow below button */
+    0 2px 3px rgba(0, 0, 0, 0.5),
+    0 4px 8px rgba(0, 0, 0, 0.25);
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 4px 6px;
   transition:
-    transform 90ms ease,
-    filter 90ms ease;
-  display: grid;
-  place-items: center;
-  gap: 1px;
-  padding: 3px 3px 4px;
-  box-sizing: border-box;
+    box-shadow 60ms ease,
+    transform 60ms ease,
+    background 60ms ease;
+  position: relative;
 }
 
+/* hover: subtle surface brightening, no movement */
 .preset-button:hover {
-  transform: translateY(-0.5px);
-  filter: brightness(1.06);
+  background:
+    linear-gradient(180deg,
+      #333840 0%,
+      #282c30 30%,
+      #1e2124 70%,
+      #181a1d 100%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    inset 1px 0 0 rgba(255, 255, 255, 0.05),
+    inset -1px 0 0 rgba(255, 255, 255, 0.05),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.25),
+    0 2px 3px rgba(0, 0, 0, 0.5),
+    0 4px 8px rgba(0, 0, 0, 0.25);
 }
 
+/* press: button sinks into the recess */
 .preset-button:active {
-  transform: translateY(0);
-  filter: brightness(0.97);
+  transform: translateY(1.5px);
+  background:
+    linear-gradient(180deg,
+      #1e2124 0%,
+      #1a1d20 40%,
+      #161819 100%
+    );
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.4),
+    inset 0 0 6px rgba(0, 0, 0, 0.15),
+    0 0 1px rgba(0, 0, 0, 0.4);
 }
 
 .slot-number {
-  font-size: 24px;
+  font-size: 28px;
   line-height: 1;
   font-weight: 800;
-  color: #556069;
+  color: #555e66;
   font-family: var(--display-font);
-  letter-spacing: 0.02em;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
 }
 
-.slot-title {
+.preset-card.active .slot-number {
+  color: #a08060;
+}
+
+.slot-label {
   font-weight: 750;
-  font-size: 9px;
-  line-height: 1.08;
-  letter-spacing: 0.07em;
-  color: #d8dde0;
+  font-size: 8px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  color: #555e66;
   text-transform: uppercase;
-  text-align: center;
+  font-family: var(--display-font);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+  max-width: 90%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  width: 100%;
-  font-family: var(--display-font);
-}
-
-.slot-subtitle {
-  font-size: 7px;
-  color: #79858f;
-  font-weight: 700;
-  letter-spacing: 0.085em;
-  text-transform: uppercase;
-  line-height: 1.05;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
   text-align: center;
-  min-height: 1.2em;
-  max-width: 98%;
 }
 
-.preset-card.empty .slot-title {
-  color: #8f999f;
+.preset-card.active .slot-label {
+  color: #8a7060;
 }
 
-.footer-btn {
-  border-radius: 3px;
-  border: 1px solid #3a4046;
-  background: linear-gradient(180deg, #212529 0%, #1a1d20 100%);
-  color: #d8dde1;
-  font-size: 7px;
-  font-weight: 760;
-  padding: 3px 6px;
-  letter-spacing: 0.09em;
-  cursor: pointer;
-  text-transform: uppercase;
-  font-family: var(--display-font);
-  transition: filter 90ms ease;
+.preset-card.empty .slot-number {
+  color: #3a4248;
 }
 
-.footer-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+.preset-card.empty .slot-label {
+  color: #3a4248;
 }
 
-.footer-btn:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-
+/* ──────────────────────────────────────────
+   FOOTER — integrated control strip
+   ────────────────────────────────────────── */
 .unit-footer {
-  margin-top: 1px;
-  padding-top: 3px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 0;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   justify-content: space-between;
   gap: 8px;
@@ -763,38 +1033,82 @@ function onEscapeKeyDown(event: KeyboardEvent) {
 
 .tagline {
   margin: 0;
-  color: #bbaf98;
+  color: #9a9080;
   font-style: italic;
-  font-weight: 760;
+  font-weight: 700;
   font-size: 9px;
   letter-spacing: 0.075em;
   font-family: "Times New Roman", Georgia, serif;
   text-transform: uppercase;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
 }
 
 .footer-controls {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
+}
+
+.footer-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 3px;
+  border: 1px solid #2e3338;
+  background:
+    linear-gradient(180deg, #272b2f 0%, #1c1f22 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 1px 2px rgba(0, 0, 0, 0.35);
+  color: #b0b6bc;
+  font-size: 7px;
+  font-weight: 760;
+  padding: 3px 7px;
+  letter-spacing: 0.09em;
+  cursor: pointer;
+  text-transform: uppercase;
+  font-family: var(--display-font);
+  transition:
+    box-shadow 60ms ease,
+    transform 60ms ease;
+}
+
+.footer-btn:active {
+  transform: translateY(0.5px);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.3),
+    0 0 1px rgba(0, 0, 0, 0.3);
+}
+
+.footer-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .model {
   margin: 0;
-  border: 1px solid #40464b;
-  background: #1a1d20;
-  color: #b2b9be;
+  border: 1px solid #363b40;
+  background:
+    linear-gradient(180deg, #1e2124 0%, #181b1e 100%);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.2),
+    0 1px 0 rgba(255, 255, 255, 0.03);
+  color: #a0a8ae;
   border-radius: 3px;
-  padding: 2px 6px;
+  padding: 2px 7px;
   font-weight: 800;
   letter-spacing: 0.12em;
   font-family: var(--display-font);
   font-size: 10px;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
 }
 
 audio {
   display: none;
 }
 
+/* ──────────────────────────────────────────
+   CONTEXT MENU — hardware-style recessed panel
+   ────────────────────────────────────────── */
 .context-backdrop {
   position: absolute;
   inset: 0;
@@ -805,48 +1119,89 @@ audio {
   position: fixed;
   min-width: 190px;
   max-width: 220px;
+  max-height: 190px;
   border-radius: 5px;
-  border: 1px solid #3f454a;
-  background: linear-gradient(180deg, #1b1f23 0%, #15181b 100%);
-  box-shadow: 0 14px 26px rgba(0, 0, 0, 0.5);
-  padding: 4px;
+  border: 1px solid #2a2e33;
+  background:
+    linear-gradient(180deg, #1c2024 0%, #141719 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 24px rgba(0, 0, 0, 0.65),
+    0 2px 6px rgba(0, 0, 0, 0.4);
+  padding: 5px;
   z-index: 24;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
+.context-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: #3a4046 transparent;
+}
+
+.context-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.context-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.context-scroll::-webkit-scrollbar-thumb {
+  background: #3a4046;
+  border-radius: 2px;
+}
+
 .context-title {
   margin: 0;
-  padding: 4px 6px;
+  padding: 3px 6px 4px;
   font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #c3c9cd;
+  color: #888e94;
   font-family: var(--display-font);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .context-item {
-  border: 1px solid #33393f;
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid #252a2f;
   border-radius: 3px;
-  background: #13161a;
-  color: #d8dde1;
+  background:
+    linear-gradient(180deg, #1a1e22 0%, #141719 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.3);
+  color: #c8cdd2;
   text-align: left;
   font-size: 9px;
   font-weight: 650;
-  padding: 5px 6px;
+  padding: 5px 7px;
   cursor: pointer;
   font-family: var(--ui-font);
+  transition:
+    box-shadow 60ms ease,
+    transform 60ms ease;
 }
 
-.context-item:hover {
-  filter: brightness(1.08);
+.context-item:active {
+  transform: translateY(0.5px);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .context-item.danger {
-  color: #ffb8ad;
-  border-color: #4e3a39;
+  color: #e89488;
+  border-color: #3a2826;
 }
 
 @media (max-width: 420px) {
