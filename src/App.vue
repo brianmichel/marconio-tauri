@@ -980,7 +980,9 @@ function onGlobalKeyDown(event: KeyboardEvent) {
     inset 2px 0 6px var(--lcd-shadow-soft),
     inset -2px 0 6px var(--lcd-shadow-soft),
     0 1px 0 rgba(255, 255, 255, 0.06),
-    0 3px 12px rgba(0, 0, 0, 0.35);
+    0 3px 12px rgba(0, 0, 0, 0.35),
+    0 0 18px var(--lcd-outer-glow),
+    0 0 48px var(--lcd-outer-glow);
   position: relative;
   z-index: 2;
   overflow: hidden;
@@ -1027,6 +1029,7 @@ function onGlobalKeyDown(event: KeyboardEvent) {
   --theme-accent-soft: rgba(180, 120, 60, 0.08);
   --theme-accent-outline: rgba(200, 140, 70, 0.25);
   --theme-accent-glow: rgba(180, 120, 60, 0.12);
+  --lcd-outer-glow: rgba(255, 195, 130, 0.2);
   --theme-slot-active: #a08060;
   --theme-slot-label-active: #8a7060;
   --theme-focus-outline: #c68452;
@@ -1049,6 +1052,7 @@ function onGlobalKeyDown(event: KeyboardEvent) {
   --theme-accent-soft: rgba(77, 130, 194, 0.12);
   --theme-accent-outline: rgba(108, 165, 233, 0.35);
   --theme-accent-glow: rgba(108, 165, 233, 0.2);
+  --lcd-outer-glow: rgba(130, 185, 255, 0.2);
   --theme-slot-active: #8fb5e1;
   --theme-slot-label-active: #7da7d8;
   --theme-focus-outline: #7fb4ef;
@@ -1071,6 +1075,7 @@ function onGlobalKeyDown(event: KeyboardEvent) {
   --theme-accent-soft: rgba(126, 186, 88, 0.12);
   --theme-accent-outline: rgba(150, 220, 108, 0.33);
   --theme-accent-glow: rgba(133, 201, 94, 0.2);
+  --lcd-outer-glow: rgba(130, 220, 100, 0.18);
   --theme-slot-active: #9ecf79;
   --theme-slot-label-active: #8dc266;
   --theme-focus-outline: #a6da7e;
@@ -1093,9 +1098,31 @@ function onGlobalKeyDown(event: KeyboardEvent) {
   --theme-accent-soft: rgba(193, 86, 142, 0.12);
   --theme-accent-outline: rgba(220, 121, 173, 0.35);
   --theme-accent-glow: rgba(212, 103, 160, 0.2);
+  --lcd-outer-glow: rgba(245, 140, 200, 0.2);
   --theme-slot-active: #d191b7;
   --theme-slot-label-active: #c884ad;
   --theme-focus-outline: #d98bb7;
+}
+
+/* LCD backlight glow — slow-wandering hotspot inside the panel */
+.lcd::after {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, var(--lcd-glow), transparent 55%);
+  opacity: 0.8;
+  animation: lcd-glow-wander 11s ease-in-out infinite;
+  pointer-events: none;
+  mix-blend-mode: soft-light;
+  will-change: transform;
+  z-index: 1;
+}
+
+@keyframes lcd-glow-wander {
+  0%, 100% { transform: translate(-10%, -6%); }
+  33%      { transform: translate(14%, 10%); }
+  66%      { transform: translate(-5%, -12%); }
 }
 
 /* LCD grain texture */
@@ -1103,6 +1130,7 @@ function onGlobalKeyDown(event: KeyboardEvent) {
   content: "";
   position: absolute;
   inset: 0;
+  border-radius: inherit;
   pointer-events: none;
   opacity: 0.06;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
