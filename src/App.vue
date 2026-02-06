@@ -380,8 +380,8 @@ function closeContextMenu() {
 }
 
 function openContextMenu(event: MouseEvent, slot: UserSlot) {
-  const menuWidth = 196;
-  const menuMaxHeight = 190;
+  const menuWidth = 210;
+  const menuMaxHeight = 220;
   const padding = 6;
 
   contextMenu.value.slot = slot;
@@ -919,6 +919,10 @@ function onGlobalKeyDown(event: KeyboardEvent) {
   font-weight: 700;
 }
 
+.lcd-row--main .lcd-cell {
+  letter-spacing: 0.04em;
+}
+
 .lcd-row--main .lcd-cell-text {
   color: #3a1e0a;
   text-shadow: 0 0 3px rgba(40, 15, 0, 0.2);
@@ -928,7 +932,7 @@ function onGlobalKeyDown(event: KeyboardEvent) {
 .lcd-row--sub {
   font-size: 10px;
   font-weight: 700;
-  margin-top: 1px;
+  margin-top: 4px;
 }
 
 .lcd-row--sub .lcd-cell-text {
@@ -940,7 +944,7 @@ function onGlobalKeyDown(event: KeyboardEvent) {
 .lcd-row--meta {
   font-size: 8px;
   font-weight: 700;
-  margin-top: 3px;
+  margin-top: 4px;
 }
 
 .lcd-row--meta .lcd-cell-ghost {
@@ -1218,10 +1222,10 @@ audio {
 
 .context-menu {
   position: fixed;
-  min-width: 190px;
-  max-width: 220px;
-  max-height: 190px;
-  border-radius: 5px;
+  min-width: 200px;
+  max-width: 240px;
+  max-height: 220px;
+  border-radius: 6px;
   border: 1px solid #2a2e33;
   background:
     linear-gradient(180deg, #1c2024 0%, #141719 100%);
@@ -1233,7 +1237,7 @@ audio {
   z-index: 24;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .context-scroll {
@@ -1242,7 +1246,7 @@ audio {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   scrollbar-width: thin;
   scrollbar-color: #3a4046 transparent;
 }
@@ -1262,21 +1266,21 @@ audio {
 
 .context-title {
   margin: 0;
-  padding: 3px 6px 4px;
-  font-size: 8px;
+  padding: 4px 8px 5px;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #888e94;
   font-family: var(--display-font);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .context-item {
   -webkit-appearance: none;
   appearance: none;
   border: 1px solid #252a2f;
-  border-radius: 3px;
+  border-radius: 4px;
   background:
     linear-gradient(180deg, #1a1e22 0%, #141719 100%);
   box-shadow:
@@ -1284,9 +1288,9 @@ audio {
     0 1px 2px rgba(0, 0, 0, 0.3);
   color: #c8cdd2;
   text-align: left;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 650;
-  padding: 5px 7px;
+  padding: 7px 9px;
   cursor: pointer;
   font-family: var(--ui-font);
   transition:
