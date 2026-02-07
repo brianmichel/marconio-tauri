@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   createNTSClient,
@@ -7,6 +7,9 @@ import {
   playableFromMixtape,
   type MediaPlayable,
 } from "./nts";
+import LcdDisplay from "./components/receiver/LcdDisplay.vue";
+import PresetGrid from "./components/receiver/PresetGrid.vue";
+import PresetContextMenu from "./components/receiver/PresetContextMenu.vue";
 
 const client = createNTSClient();
 const STORAGE_KEY = "nts-user-presets-v1";
@@ -26,23 +29,7 @@ const currentPlayable = ref<MediaPlayable | null>(null);
 const activeSlot = ref<number | null>(null);
 const isPlaying = ref(false);
 const audioRef = ref<HTMLAudioElement | null>(null);
-
-// LCD character-cell display
-// ~ shows all 14 segments in DSEG14 (ghost/background segments)
-const MAIN_FONT_SIZE = 20;
-const SUB_FONT_SIZE = 10;
-const META_FONT_SIZE = 8;
-const SCROLL_GAP = 4; // blank cells between end and wrap
-
-const lcdRef = ref<HTMLElement | null>(null);
-const mainCols = ref(18);
-const subCols = ref(36);
-const metaCols = ref(45);
-const mainScrollPos = ref(0);
-const subScrollPos = ref(0);
 const isLcdThemeAnimating = ref(false);
-let mainScrollTimer: ReturnType<typeof setTimeout> | null = null;
-let subScrollTimer: ReturnType<typeof setTimeout> | null = null;
 let lcdThemeAnimationTimer: ReturnType<typeof setTimeout> | null = null;
 const BLOCKED_BROWSER_SHORTCUTS = new Set(["a", "r", "+", "=", "-", "0"]);
 const EDITABLE_TARGET_SELECTOR = [
@@ -52,78 +39,6 @@ const EDITABLE_TARGET_SELECTOR = [
   '[contenteditable="true"]',
   '[role="textbox"]',
 ].join(", ");
-
-function measureCols() {
-  const el = lcdRef.value;
-  if (!el) return;
-  const style = getComputedStyle(el);
-  const width =
-    el.clientWidth -
-    parseFloat(style.paddingLeft) -
-    parseFloat(style.paddingRight);
-
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-
-  // Measure a run of characters to get accurate average width
-  const sample = "~~~~~~~~~~"; // 10 chars
-  ctx.font = `700 ${MAIN_FONT_SIZE}px DSEG14, monospace`;
-  const mainCharW = ctx.measureText(sample).width / sample.length;
-  if (mainCharW > 0) mainCols.value = Math.floor(width / mainCharW);
-
-  ctx.font = `700 ${SUB_FONT_SIZE}px DSEG14, monospace`;
-  const subCharW = ctx.measureText(sample).width / sample.length;
-  if (subCharW > 0) subCols.value = Math.floor(width / subCharW);
-
-  ctx.font = `700 ${META_FONT_SIZE}px DSEG14, monospace`;
-  const metaCharW = ctx.measureText(sample).width / sample.length;
-  if (metaCharW > 0) metaCols.value = Math.floor(width / metaCharW);
-}
-
-/**
- * Clean text for DSEG14 rendering.
- * Space → ! (full-width blank cell, keeps alignment with ghost ~)
- * Colon → - (colons break the segment illusion)
- */
-function dsegClean(text: string): string {
-  return text.replace(/ /g, "!").replace(/:/g, "-");
-}
-
-/** Extract a cols-wide window from text at the given offset, wrapping around. */
-function visibleSlice(text: string, cols: number, offset: number): string {
-  const cleaned = dsegClean(text);
-  if (!cleaned || cleaned.length <= cols) {
-    return (cleaned || "").padEnd(cols, "!");
-  }
-  const gap = "!".repeat(SCROLL_GAP);
-  const looped = cleaned + gap;
-  const total = looped.length;
-  const pos = offset % total;
-  let out = "";
-  for (let i = 0; i < cols; i++) {
-    out += looped[(pos + i) % total];
-  }
-  return out;
-}
-
-const lcdMainVisible = computed(() =>
-  visibleSlice(lcdPrimary.value, mainCols.value, mainScrollPos.value),
-);
-
-const lcdSubVisible = computed(() =>
-  visibleSlice(lcdSecondary.value, subCols.value, subScrollPos.value),
-);
-
-const lcdMetaText = computed(() => {
-  const play = isPlaying.value ? "PLAY" : "STOP";
-  const status = errorMessage.value
-    ? "FAULT"
-    : isLoading.value
-      ? "SYNC"
-      : "READY";
-  return dsegClean(play + " " + status).padEnd(metaCols.value, "!");
-});
 
 function readLcdTheme(): LcdTheme {
   try {
@@ -151,43 +66,6 @@ function cycleLcdTheme() {
     isLcdThemeAnimating.value = false;
     lcdThemeAnimationTimer = null;
   }, 450);
-}
-
-function startMainScroll() {
-  stopMainScroll();
-  if (lcdPrimary.value.length <= mainCols.value) return;
-  const total = lcdPrimary.value.length + SCROLL_GAP;
-  mainScrollTimer = setTimeout(function tick() {
-    mainScrollPos.value++;
-    // Pause when a full cycle completes
-    mainScrollTimer = setTimeout(tick, mainScrollPos.value % total === 0 ? 2500 : 250);
-  }, 2500);
-}
-
-function stopMainScroll() {
-  if (mainScrollTimer) {
-    clearTimeout(mainScrollTimer);
-    mainScrollTimer = null;
-  }
-  mainScrollPos.value = 0;
-}
-
-function startSubScroll() {
-  stopSubScroll();
-  if (lcdSecondary.value.length <= subCols.value) return;
-  const total = lcdSecondary.value.length + SCROLL_GAP;
-  subScrollTimer = setTimeout(function tick() {
-    subScrollPos.value++;
-    subScrollTimer = setTimeout(tick, subScrollPos.value % total === 0 ? 2500 : 200);
-  }, 2500);
-}
-
-function stopSubScroll() {
-  if (subScrollTimer) {
-    clearTimeout(subScrollTimer);
-    subScrollTimer = null;
-  }
-  subScrollPos.value = 0;
 }
 
 const contextMenu = ref<{
@@ -305,6 +183,16 @@ const lcdSecondary = computed(() => {
   return "";
 });
 
+const lcdMeta = computed(() => {
+  const play = isPlaying.value ? "PLAY" : "STOP";
+  const status = errorMessage.value
+    ? "FAULT"
+    : isLoading.value
+      ? "SYNC"
+      : "READY";
+  return `${play} ${status}`;
+});
+
 const presetCards = computed(() => {
   return [1, 2, 3, 4, 5, 6].map((slot) => {
     if (slot === 1) {
@@ -332,6 +220,15 @@ const presetCards = computed(() => {
       playable,
     };
   });
+});
+
+const contextMenuHasAssignment = computed(() => {
+  const slot = contextMenu.value.slot;
+  if (!slot) {
+    return false;
+  }
+
+  return Boolean(assignments.value[slot]);
 });
 
 function normalizeAssignments() {
@@ -490,6 +387,15 @@ function clearUserSlot(slot: UserSlot) {
   }
 }
 
+function clearContextMenuSlot() {
+  const slot = contextMenu.value.slot;
+  if (!slot) {
+    return;
+  }
+
+  clearUserSlot(slot);
+}
+
 function onPresetPress(slot: number) {
   const card = presetCards.value.find((item) => item.slot === slot);
   if (!card) {
@@ -555,28 +461,12 @@ async function startWindowDrag() {
   }
 }
 
-watch(lcdPrimary, () => {
-  stopMainScroll();
-  nextTick(startMainScroll);
-});
-
-watch(lcdSecondary, () => {
-  stopSubScroll();
-  nextTick(startSubScroll);
-});
-
 onMounted(async () => {
   window.addEventListener("keydown", onGlobalKeyDown);
   window.addEventListener("contextmenu", preventBrowserContextMenu);
   window.addEventListener("dragover", preventDocumentDrop);
   window.addEventListener("drop", preventDocumentDrop);
   loadPlayableMedia();
-  await document.fonts.ready;
-  nextTick(() => {
-    measureCols();
-    startMainScroll();
-    startSubScroll();
-  });
 });
 
 onBeforeUnmount(() => {
@@ -585,8 +475,6 @@ onBeforeUnmount(() => {
   window.removeEventListener("dragover", preventDocumentDrop);
   window.removeEventListener("drop", preventDocumentDrop);
   controller?.abort();
-  stopMainScroll();
-  stopSubScroll();
   const audio = audioRef.value;
   if (audio) {
     audio.pause();
@@ -671,58 +559,21 @@ function onGlobalKeyDown(event: KeyboardEvent) {
         <p class="brand">MARCONIO</p>
       </header>
 
-      <section
-        ref="lcdRef"
-        class="lcd"
-        :class="{ 'lcd--theme-animating': isLcdThemeAnimating }"
-        aria-live="polite"
-        @click="cycleLcdTheme"
-      >
-        <div class="lcd-row lcd-row--main" aria-hidden="true">
-          <span v-for="i in mainCols" :key="i" class="lcd-cell">
-            <span class="lcd-cell-ghost">~</span>
-            <span class="lcd-cell-text">{{ lcdMainVisible[i - 1] }}</span>
-          </span>
-        </div>
-        <div class="lcd-row lcd-row--sub" aria-hidden="true">
-          <span v-for="i in subCols" :key="i" class="lcd-cell">
-            <span class="lcd-cell-ghost">~</span>
-            <span class="lcd-cell-text">{{ lcdSubVisible[i - 1] }}</span>
-          </span>
-        </div>
-        <div class="lcd-row lcd-row--meta" aria-hidden="true">
-          <span v-for="i in metaCols" :key="i" class="lcd-cell">
-            <span class="lcd-cell-ghost">~</span>
-            <span class="lcd-cell-text">{{ lcdMetaText[i - 1] }}</span>
-          </span>
-        </div>
-      </section>
+      <LcdDisplay
+        :primary-text="lcdPrimary"
+        :secondary-text="lcdSecondary"
+        :meta-text="lcdMeta"
+        :theme-animating="isLcdThemeAnimating"
+        @cycle-theme="cycleLcdTheme"
+      />
 
-      <section class="preset-grid" aria-label="Preset selector">
-        <article
-          v-for="card in presetCards"
-          :key="card.slot"
-          class="preset-card"
-          :class="{
-            active: activeSlot === card.slot,
-            locked: card.locked,
-            empty: !card.playable,
-          }"
-        >
-          <button
-            type="button"
-            class="preset-button"
-            :ref="(el) => setPresetButtonRef(card.slot, el)"
-            @click="onPresetPress(card.slot)"
-            @contextmenu.prevent="onPresetContextMenu($event, card.slot, card.locked)"
-          >
-            <span class="slot-number">{{ card.slot }}</span>
-            <span class="slot-label">
-              {{ card.locked ? "CH" : card.playable ? card.playable.title.toUpperCase() : "+" }}
-            </span>
-          </button>
-        </article>
-      </section>
+      <PresetGrid
+        :cards="presetCards"
+        :active-slot="activeSlot"
+        :set-button-ref="setPresetButtonRef"
+        @press-slot="onPresetPress"
+        @open-slot-context="onPresetContextMenu($event.event, $event.slot, $event.locked)"
+      />
 
       <footer class="unit-footer" data-tauri-drag-region>
         <p class="tagline">STREAMING RECEIVER</p>
@@ -752,892 +603,19 @@ function onGlobalKeyDown(event: KeyboardEvent) {
 
       <audio ref="audioRef" preload="none" @pause="isPlaying = false" @play="isPlaying = true" />
 
-      <div
-        v-if="contextMenu.visible"
-        class="context-backdrop"
-        @mousedown="closeContextMenu"
-        @contextmenu.prevent="closeContextMenu"
+      <PresetContextMenu
+        :visible="contextMenu.visible"
+        :slot="contextMenu.slot"
+        :x="contextMenu.x"
+        :y="contextMenu.y"
+        :options="mixtapeOptions"
+        :has-assignment="contextMenuHasAssignment"
+        @close="closeContextMenu"
+        @assign="assignSlotFromMenu"
+        @clear="clearContextMenuSlot"
       />
-      <section
-        v-if="contextMenu.visible && contextMenu.slot !== null"
-        class="context-menu"
-        :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
-        @mousedown.stop
-        @contextmenu.prevent
-      >
-        <p class="context-title">Preset {{ contextMenu.slot }}</p>
-        <div class="context-scroll">
-          <button
-            v-for="option in mixtapeOptions"
-            :key="option.alias"
-            type="button"
-            class="context-item"
-            @click="assignSlotFromMenu(option.alias)"
-          >
-            {{ option.title }}
-          </button>
-        </div>
-        <button
-          v-if="assignments[contextMenu.slot]"
-          type="button"
-          class="context-item danger"
-          @click="clearUserSlot(contextMenu.slot)"
-        >
-          Clear Preset
-        </button>
-      </section>
     </div>
   </main>
 </template>
 
-<style scoped>
-@font-face {
-  font-family: "DSEG14";
-  src: url("./assets/DSEG14Classic-Bold.ttf") format("truetype");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "DSEG14";
-  src: url("./assets/DSEG14Classic-Regular.ttf") format("truetype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "DSEG14";
-  src: url("./assets/DSEG14Classic-Light.ttf") format("truetype");
-  font-weight: 300;
-  font-style: normal;
-  font-display: swap;
-}
-
-:global(html),
-:global(body),
-:global(#app) {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  overscroll-behavior: none;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-}
-
-:global(*),
-:global(*::before),
-:global(*::after) {
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-  -webkit-user-drag: none;
-}
-
-:global(input),
-:global(textarea),
-:global([contenteditable=""]),
-:global([contenteditable="true"]) {
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-:global(body) {
-  background: #111315;
-  overflow: hidden;
-  font-family:
-    "SF Pro Text",
-    -apple-system,
-    BlinkMacSystemFont,
-    "Helvetica Neue",
-    sans-serif;
-}
-
-.scene {
-  width: 100vw;
-  height: 100vh;
-  cursor: default;
-}
-
-/* ──────────────────────────────────────────
-   UNIT BODY — thick molded enclosure
-   ────────────────────────────────────────── */
-.unit {
-  --ui-font:
-    "SF Pro Text",
-    -apple-system,
-    BlinkMacSystemFont,
-    "Helvetica Neue",
-    sans-serif;
-  --display-font:
-    "SF Pro Display",
-    -apple-system,
-    BlinkMacSystemFont,
-    "Helvetica Neue",
-    sans-serif;
-  --lcd-font: "DSEG14", monospace;
-  --lcd-border: #7a4120;
-  --lcd-glow: rgba(255, 240, 210, 0.3);
-  --lcd-top: #c87848;
-  --lcd-mid: #a35a30;
-  --lcd-bottom: #8e4e28;
-  --lcd-shadow-strong: rgba(60, 20, 0, 0.3);
-  --lcd-shadow-soft: rgba(60, 20, 0, 0.1);
-  --lcd-ghost: rgba(55, 28, 10, 0.16);
-  --lcd-main-text: #3a1e0a;
-  --lcd-main-glow: rgba(40, 15, 0, 0.2);
-  --lcd-sub-glow: rgba(40, 15, 0, 0.15);
-  --lcd-meta-text: #5a301a;
-  --theme-accent-border: #8a5a30;
-  --theme-accent-soft: rgba(180, 120, 60, 0.08);
-  --theme-accent-outline: rgba(200, 140, 70, 0.25);
-  --theme-accent-glow: rgba(180, 120, 60, 0.12);
-  --theme-slot-active: #a08060;
-  --theme-slot-label-active: #8a7060;
-  --theme-focus-outline: #c68452;
-
-  width: 100%;
-  height: 100%;
-  border: 1px solid #4a4d50;
-  background:
-    linear-gradient(168deg, rgba(255, 255, 255, 0.07) 0%, transparent 22%),
-    linear-gradient(180deg, #2a2e32 0%, #1a1d21 38%, #111417 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.15),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.6),
-    inset 2px 0 6px rgba(0, 0, 0, 0.2),
-    inset -2px 0 6px rgba(0, 0, 0, 0.2),
-    inset 0 -12px 28px rgba(0, 0, 0, 0.4);
-  padding: 6px 8px 5px;
-  color: #f2f2f2;
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  font-family: var(--ui-font);
-}
-
-/* subtle scan-line texture */
-.unit::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0.012) 0,
-    rgba(255, 255, 255, 0.012) 1px,
-    transparent 1px,
-    transparent 3px
-  );
-  z-index: 1;
-}
-
-/* fine noise grain overlay */
-.unit::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 128px 128px;
-  z-index: 1;
-}
-
-.drag-strip {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 28px;
-  z-index: 10;
-  cursor: grab;
-}
-
-.drag-strip:active {
-  cursor: grabbing;
-}
-
-/* ──────────────────────────────────────────
-   HEADER
-   ────────────────────────────────────────── */
-.unit-header {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-height: 22px;
-  padding-left: 76px;
-  padding-right: 2px;
-  position: relative;
-  z-index: 8;
-}
-
-.brand {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  color: #d4d6d8;
-  font-family: var(--display-font);
-  text-transform: uppercase;
-  text-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.5),
-    0 -1px 0 rgba(255, 255, 255, 0.06);
-}
-
-/* ──────────────────────────────────────────
-   LCD DISPLAY — warm amber segmented screen
-   ────────────────────────────────────────── */
-.lcd {
-  border-radius: 4px;
-  border: 1px solid var(--lcd-border);
-  background:
-    radial-gradient(120% 100% at 8% -10%, var(--lcd-glow), transparent 50%),
-    linear-gradient(180deg, var(--lcd-top) 0%, var(--lcd-mid) 50%, var(--lcd-bottom) 100%);
-  padding: 8px 10px 6px;
-  box-shadow:
-    inset 0 2px 4px rgba(0, 0, 0, 0.15),
-    inset 0 -3px 8px var(--lcd-shadow-strong),
-    inset 2px 0 6px var(--lcd-shadow-soft),
-    inset -2px 0 6px var(--lcd-shadow-soft),
-    0 1px 0 rgba(255, 255, 255, 0.06),
-    0 3px 12px rgba(0, 0, 0, 0.35),
-    0 0 18px var(--lcd-outer-glow),
-    0 0 48px var(--lcd-outer-glow);
-  position: relative;
-  z-index: 2;
-  overflow: hidden;
-  cursor: pointer;
-  transition:
-    border-color 280ms ease,
-    box-shadow 280ms ease,
-    filter 140ms ease;
-}
-
-.lcd:hover {
-  filter: brightness(1.03);
-}
-
-.lcd--theme-animating {
-  animation: lcd-flicker 450ms linear;
-}
-
-@keyframes lcd-flicker {
-  0%   { filter: brightness(1) saturate(1); }
-  12%  { filter: brightness(0.82) saturate(0.7); }
-  22%  { filter: brightness(1.08) saturate(0.9); }
-  35%  { filter: brightness(0.75) saturate(0.6); }
-  50%  { filter: brightness(1.18) saturate(1.15); }
-  65%  { filter: brightness(1.1) saturate(1.06); }
-  82%  { filter: brightness(1.03) saturate(1.01); }
-  100% { filter: brightness(1) saturate(1); }
-}
-
-.unit.theme--amber {
-  --lcd-border: #7a4120;
-  --lcd-glow: rgba(255, 240, 210, 0.3);
-  --lcd-top: #c87848;
-  --lcd-mid: #a35a30;
-  --lcd-bottom: #8e4e28;
-  --lcd-shadow-strong: rgba(60, 20, 0, 0.3);
-  --lcd-shadow-soft: rgba(60, 20, 0, 0.1);
-  --lcd-ghost: rgba(55, 28, 10, 0.16);
-  --lcd-main-text: #3a1e0a;
-  --lcd-main-glow: rgba(40, 15, 0, 0.2);
-  --lcd-sub-glow: rgba(40, 15, 0, 0.15);
-  --lcd-meta-text: #5a301a;
-  --theme-accent-border: #8a5a30;
-  --theme-accent-soft: rgba(180, 120, 60, 0.08);
-  --theme-accent-outline: rgba(200, 140, 70, 0.25);
-  --theme-accent-glow: rgba(180, 120, 60, 0.12);
-  --lcd-outer-glow: rgba(255, 195, 130, 0.2);
-  --theme-slot-active: #a08060;
-  --theme-slot-label-active: #8a7060;
-  --theme-focus-outline: #c68452;
-}
-
-.unit.theme--blue {
-  --lcd-border: #2a5f89;
-  --lcd-glow: rgba(208, 236, 255, 0.3);
-  --lcd-top: #6ba6d8;
-  --lcd-mid: #4377ad;
-  --lcd-bottom: #2b567f;
-  --lcd-shadow-strong: rgba(17, 49, 76, 0.35);
-  --lcd-shadow-soft: rgba(17, 49, 76, 0.15);
-  --lcd-ghost: rgba(20, 45, 71, 0.18);
-  --lcd-main-text: #122b44;
-  --lcd-main-glow: rgba(8, 30, 55, 0.24);
-  --lcd-sub-glow: rgba(8, 30, 55, 0.2);
-  --lcd-meta-text: #1d3f62;
-  --theme-accent-border: #4a75b4;
-  --theme-accent-soft: rgba(77, 130, 194, 0.12);
-  --theme-accent-outline: rgba(108, 165, 233, 0.35);
-  --theme-accent-glow: rgba(108, 165, 233, 0.2);
-  --lcd-outer-glow: rgba(130, 185, 255, 0.2);
-  --theme-slot-active: #8fb5e1;
-  --theme-slot-label-active: #7da7d8;
-  --theme-focus-outline: #7fb4ef;
-}
-
-.unit.theme--green {
-  --lcd-border: #3f6e2f;
-  --lcd-glow: rgba(224, 255, 214, 0.28);
-  --lcd-top: #8cca63;
-  --lcd-mid: #699f44;
-  --lcd-bottom: #4c7932;
-  --lcd-shadow-strong: rgba(27, 56, 16, 0.35);
-  --lcd-shadow-soft: rgba(27, 56, 16, 0.15);
-  --lcd-ghost: rgba(25, 49, 15, 0.18);
-  --lcd-main-text: #1e3c12;
-  --lcd-main-glow: rgba(15, 35, 8, 0.22);
-  --lcd-sub-glow: rgba(15, 35, 8, 0.18);
-  --lcd-meta-text: #2f5122;
-  --theme-accent-border: #5e8d45;
-  --theme-accent-soft: rgba(126, 186, 88, 0.12);
-  --theme-accent-outline: rgba(150, 220, 108, 0.33);
-  --theme-accent-glow: rgba(133, 201, 94, 0.2);
-  --lcd-outer-glow: rgba(130, 220, 100, 0.18);
-  --theme-slot-active: #9ecf79;
-  --theme-slot-label-active: #8dc266;
-  --theme-focus-outline: #a6da7e;
-}
-
-.unit.theme--purpleRed {
-  --lcd-border: #7c2d57;
-  --lcd-glow: rgba(255, 214, 234, 0.3);
-  --lcd-top: #cb6897;
-  --lcd-mid: #a54778;
-  --lcd-bottom: #7a315a;
-  --lcd-shadow-strong: rgba(73, 18, 45, 0.35);
-  --lcd-shadow-soft: rgba(73, 18, 45, 0.15);
-  --lcd-ghost: rgba(63, 18, 39, 0.18);
-  --lcd-main-text: #4a1734;
-  --lcd-main-glow: rgba(52, 11, 30, 0.24);
-  --lcd-sub-glow: rgba(52, 11, 30, 0.2);
-  --lcd-meta-text: #662347;
-  --theme-accent-border: #a7487a;
-  --theme-accent-soft: rgba(193, 86, 142, 0.12);
-  --theme-accent-outline: rgba(220, 121, 173, 0.35);
-  --theme-accent-glow: rgba(212, 103, 160, 0.2);
-  --lcd-outer-glow: rgba(245, 140, 200, 0.2);
-  --theme-slot-active: #d191b7;
-  --theme-slot-label-active: #c884ad;
-  --theme-focus-outline: #d98bb7;
-}
-
-/* LCD backlight glow — slow-wandering hotspot inside the panel */
-.lcd::after {
-  content: "";
-  position: absolute;
-  inset: -30%;
-  border-radius: 50%;
-  background: radial-gradient(ellipse at center, var(--lcd-glow), transparent 55%);
-  opacity: 0.8;
-  animation: lcd-glow-wander 11s ease-in-out infinite;
-  pointer-events: none;
-  mix-blend-mode: soft-light;
-  will-change: transform;
-  z-index: 1;
-}
-
-@keyframes lcd-glow-wander {
-  0%, 100% { transform: translate(-10%, -6%); }
-  33%      { transform: translate(14%, 10%); }
-  66%      { transform: translate(-5%, -12%); }
-}
-
-/* LCD grain texture */
-.lcd::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  opacity: 0.06;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 128px 128px;
-  z-index: 0;
-}
-
-/* LCD row: holds fixed character cells */
-.lcd-row {
-  overflow: hidden;
-  white-space: nowrap;
-  font-family: var(--lcd-font);
-  text-transform: uppercase;
-  letter-spacing: 0;
-  line-height: 1;
-}
-
-/* Individual character cell — fixed position, never moves */
-.lcd-cell {
-  display: inline-block;
-  position: relative;
-  text-align: center;
-  vertical-align: top;
-}
-
-/* Ghost: the ~ character sets cell width, shows unlit segments */
-.lcd-cell-ghost {
-  visibility: visible;
-  color: var(--lcd-ghost);
-  transition: color 280ms ease;
-}
-
-/* Text: absolutely positioned on top of ghost, same size */
-.lcd-cell-text {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-}
-
-/* Main row: large title */
-.lcd-row--main {
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.lcd-row--main .lcd-cell {
-  letter-spacing: 0.04em;
-}
-
-.lcd-row--main .lcd-cell-text {
-  color: var(--lcd-main-text);
-  text-shadow: 0 0 3px var(--lcd-main-glow);
-  transition:
-    color 280ms ease,
-    text-shadow 280ms ease;
-}
-
-/* Sub row: subtitle / show info */
-.lcd-row--sub {
-  font-size: 10px;
-  font-weight: 700;
-  margin-top: 4px;
-}
-
-.lcd-row--sub .lcd-cell-text {
-  color: var(--lcd-main-text);
-  text-shadow: 0 0 2px var(--lcd-sub-glow);
-  transition:
-    color 280ms ease,
-    text-shadow 280ms ease;
-}
-
-/* Meta row: status indicators */
-.lcd-row--meta {
-  font-size: 8px;
-  font-weight: 700;
-  margin-top: 4px;
-}
-
-.lcd-row--meta .lcd-cell-ghost {
-  opacity: 0.6;
-}
-
-.lcd-row--meta .lcd-cell-text {
-  color: var(--lcd-meta-text);
-  opacity: 0.7;
-  transition: color 280ms ease;
-}
-
-/* ──────────────────────────────────────────
-   PRESET GRID
-   ────────────────────────────────────────── */
-.preset-grid {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  min-height: 0;
-  position: relative;
-  z-index: 2;
-}
-
-/* ──────────────────────────────────────────
-   PRESET CARD — recessed well that holds the button
-   ────────────────────────────────────────── */
-.preset-card {
-  border-radius: 6px;
-  border: 1px solid #0a0b0d;
-  background: linear-gradient(180deg, #080a0c 0%, #0d0f11 100%);
-  box-shadow:
-    inset 0 2px 4px rgba(0, 0, 0, 0.6),
-    inset 0 -1px 2px rgba(255, 255, 255, 0.03),
-    0 1px 0 rgba(255, 255, 255, 0.04);
-  padding: 3px;
-  display: flex;
-  flex-direction: column;
-  transition:
-    border-color 280ms ease,
-    box-shadow 280ms ease;
-}
-
-.preset-card.active {
-  border-color: var(--theme-accent-border);
-  box-shadow:
-    inset 0 2px 4px rgba(0, 0, 0, 0.5),
-    inset 0 0 8px var(--theme-accent-soft),
-    0 0 0 1px var(--theme-accent-outline),
-    0 0 12px var(--theme-accent-glow);
-}
-
-/* ──────────────────────────────────────────
-   PRESET BUTTON — raised 3D physical button
-   ────────────────────────────────────────── */
-.preset-button {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  flex: 1;
-  min-height: 0;
-  border: none;
-  border-radius: 4px;
-  color: #656e76;
-  background:
-    linear-gradient(180deg,
-      #2c3035 0%,
-      #222629 30%,
-      #1a1d20 70%,
-      #141618 100%
-    );
-  box-shadow:
-    /* top bevel highlight */
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    /* left/right edge highlights */
-    inset 1px 0 0 rgba(255, 255, 255, 0.04),
-    inset -1px 0 0 rgba(255, 255, 255, 0.04),
-    /* bottom inner shadow */
-    inset 0 -2px 3px rgba(0, 0, 0, 0.25),
-    /* raised shadow below button */
-    0 2px 3px rgba(0, 0, 0, 0.5),
-    0 4px 8px rgba(0, 0, 0, 0.25);
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 4px 4px 6px;
-  transition:
-    box-shadow 60ms ease,
-    transform 60ms ease,
-    background 60ms ease;
-  position: relative;
-}
-
-/* hover: subtle surface brightening, no movement */
-.preset-button:hover {
-  background:
-    linear-gradient(180deg,
-      #333840 0%,
-      #282c30 30%,
-      #1e2124 70%,
-      #181a1d 100%
-    );
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.13),
-    inset 1px 0 0 rgba(255, 255, 255, 0.05),
-    inset -1px 0 0 rgba(255, 255, 255, 0.05),
-    inset 0 -2px 3px rgba(0, 0, 0, 0.25),
-    0 2px 3px rgba(0, 0, 0, 0.5),
-    0 4px 8px rgba(0, 0, 0, 0.25);
-}
-
-/* press: button sinks into the recess */
-.preset-button:active {
-  transform: translateY(1.5px);
-  background:
-    linear-gradient(180deg,
-      #1e2124 0%,
-      #1a1d20 40%,
-      #161819 100%
-    );
-  box-shadow:
-    inset 0 1px 3px rgba(0, 0, 0, 0.4),
-    inset 0 0 6px rgba(0, 0, 0, 0.15),
-    0 0 1px rgba(0, 0, 0, 0.4);
-}
-
-.preset-button:focus-visible,
-.model:focus-visible,
-.model-menu-item:focus-visible,
-.context-item:focus-visible {
-  outline: 1px solid var(--theme-focus-outline);
-  outline-offset: 1px;
-  transition: outline-color 280ms ease;
-}
-
-.slot-number {
-  font-size: 28px;
-  line-height: 1;
-  font-weight: 800;
-  color: #555e66;
-  font-family: var(--display-font);
-  letter-spacing: -0.01em;
-  transition: color 280ms ease;
-}
-
-.preset-card.active .slot-number {
-  color: var(--theme-slot-active);
-}
-
-.slot-label {
-  font-weight: 750;
-  font-size: 10px;
-  line-height: 1;
-  letter-spacing: 0.08em;
-  color: #555e66;
-  text-transform: uppercase;
-  font-family: var(--display-font);
-  max-width: 90%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: center;
-  transition: color 280ms ease;
-}
-
-.preset-card.active .slot-label {
-  color: var(--theme-slot-label-active);
-}
-
-.preset-card.empty .slot-number {
-  color: #3a4248;
-}
-
-.preset-card.empty .slot-label {
-  color: #3a4248;
-}
-
-/* ──────────────────────────────────────────
-   FOOTER — integrated control strip
-   ────────────────────────────────────────── */
-.unit-footer {
-  margin-top: 0;
-  padding-top: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: center;
-  position: relative;
-  z-index: 3;
-}
-
-.tagline {
-  margin: 0;
-  color: #6b6560;
-  font-style: normal;
-  font-weight: 600;
-  font-size: 8px;
-  letter-spacing: 0.22em;
-  font-family: var(--display-font);
-  text-transform: uppercase;
-  text-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-.model-wrap {
-  position: relative;
-}
-
-.model {
-  -webkit-appearance: none;
-  appearance: none;
-  margin: 0;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-bottom-color: rgba(0, 0, 0, 0.25);
-  background:
-    linear-gradient(180deg, #b8bcc0 0%, #8a8e92 40%, #9a9ea2 60%, #a8acb0 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
-    0 1px 2px rgba(0, 0, 0, 0.3);
-  color: #2a2d30;
-  border-radius: 2px;
-  padding: 1px 6px;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  font-family: var(--display-font);
-  font-size: 8px;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
-  cursor: pointer;
-}
-
-.model:active {
-  box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, 0.15),
-    0 0 1px rgba(0, 0, 0, 0.2);
-}
-
-.model-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 99;
-}
-
-.model-menu {
-  position: absolute;
-  bottom: calc(100% + 5px);
-  right: 0;
-  background:
-    linear-gradient(180deg, #2c3035 0%, #222629 100%);
-  border: 1px solid #3a3f44;
-  border-radius: 4px;
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  padding: 3px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  z-index: 100;
-  min-width: 90px;
-}
-
-.model-menu-item {
-  -webkit-appearance: none;
-  appearance: none;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: #b0b6bc;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 5px 10px;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  text-transform: uppercase;
-  font-family: var(--display-font);
-  text-align: left;
-  white-space: nowrap;
-}
-
-.model-menu-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.model-menu-item:active {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.model-menu-item:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-audio {
-  display: none;
-}
-
-/* ──────────────────────────────────────────
-   CONTEXT MENU — hardware-style recessed panel
-   ────────────────────────────────────────── */
-.context-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-}
-
-.context-menu {
-  position: fixed;
-  min-width: 200px;
-  max-width: 240px;
-  max-height: 220px;
-  border-radius: 6px;
-  border: 1px solid #2a2e33;
-  background:
-    linear-gradient(180deg, #1c2024 0%, #141719 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 8px 24px rgba(0, 0, 0, 0.65),
-    0 2px 6px rgba(0, 0, 0, 0.4);
-  padding: 5px;
-  z-index: 24;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.context-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  scrollbar-width: thin;
-  scrollbar-color: #3a4046 transparent;
-}
-
-.context-scroll::-webkit-scrollbar {
-  width: 4px;
-}
-
-.context-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.context-scroll::-webkit-scrollbar-thumb {
-  background: #3a4046;
-  border-radius: 2px;
-}
-
-.context-title {
-  margin: 0;
-  padding: 4px 8px 5px;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #888e94;
-  font-family: var(--display-font);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.context-item {
-  -webkit-appearance: none;
-  appearance: none;
-  border: 1px solid #252a2f;
-  border-radius: 4px;
-  background:
-    linear-gradient(180deg, #1a1e22 0%, #141719 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 1px 2px rgba(0, 0, 0, 0.3);
-  color: #c8cdd2;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 650;
-  padding: 7px 9px;
-  cursor: pointer;
-  font-family: var(--ui-font);
-  transition:
-    box-shadow 60ms ease,
-    transform 60ms ease;
-}
-
-.context-item:active {
-  transform: translateY(0.5px);
-  box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-
-.context-item.danger {
-  color: #e89488;
-  border-color: #3a2826;
-}
-
-@media (max-width: 420px) {
-  .context-menu {
-    max-width: 180px;
-    min-width: 160px;
-  }
-}
-</style>
+<style scoped src="./components/receiver/receiver-shell.css"></style>
