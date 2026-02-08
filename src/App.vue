@@ -10,6 +10,8 @@ import {
 import LcdDisplay from "./components/receiver/LcdDisplay.vue";
 import PresetGrid from "./components/receiver/PresetGrid.vue";
 import PresetContextMenu from "./components/receiver/PresetContextMenu.vue";
+import AudioFxMenuItem from "./components/receiver/AudioFxMenuItem.vue";
+import { useAudioFx } from "./composables/useAudioFx";
 
 const client = createNTSClient();
 const STORAGE_KEY = "nts-user-presets-v1";
@@ -111,6 +113,14 @@ function readAssignments(): PresetAssignments {
 
 const assignments = ref<PresetAssignments>(readAssignments());
 const lcdTheme = ref<LcdTheme>(readLcdTheme());
+const {
+  audioFxLabel,
+  cycleAudioFxPreset,
+  ensureAudioContext,
+  refreshAudioFxGraph,
+  resumeAudioContext,
+  teardownAudioFx,
+} = useAudioFx(audioRef);
 
 watch(
   assignments,
@@ -123,6 +133,7 @@ watch(
 watch(lcdTheme, (value) => {
   localStorage.setItem(LCD_THEME_KEY, value);
 });
+
 
 const channelOne = computed(
   () =>
@@ -288,10 +299,15 @@ async function startPlayback(playable: MediaPlayable, slot: number) {
     return;
   }
 
+  audio.crossOrigin = "anonymous";
   audio.src = playable.streamUrl;
+  ensureAudioContext();
+  refreshAudioFxGraph();
 
   try {
+    const resumePromise = resumeAudioContext();
     await audio.play();
+    await resumePromise;
     isPlaying.value = true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -480,6 +496,7 @@ onBeforeUnmount(() => {
     audio.pause();
     audio.src = "";
   }
+  teardownAudioFx();
   if (lcdThemeAnimationTimer) {
     clearTimeout(lcdThemeAnimationTimer);
     lcdThemeAnimationTimer = null;
@@ -597,11 +614,18 @@ function onGlobalKeyDown(event: KeyboardEvent) {
             >
               STOP
             </button>
+            <AudioFxMenuItem :label="audioFxLabel" @cycle="cycleAudioFxPreset" />
           </div>
         </div>
       </footer>
 
-      <audio ref="audioRef" preload="none" @pause="isPlaying = false" @play="isPlaying = true" />
+      <audio
+        ref="audioRef"
+        preload="none"
+        crossorigin="anonymous"
+        @pause="isPlaying = false"
+        @play="isPlaying = true"
+      />
 
       <PresetContextMenu
         :visible="contextMenu.visible"
