@@ -92,6 +92,12 @@ class FakeAudioContext {
     return source as unknown as MediaElementAudioSourceNode;
   }
 
+  createMediaStreamSource() {
+    const source = new FakeNode();
+    this.lastSource = source;
+    return source as unknown as MediaStreamAudioSourceNode;
+  }
+
   resume() {
     this.state = "running";
     return Promise.resolve();
@@ -209,6 +215,32 @@ describe("useAudioFx", () => {
     expect(() => refreshAudioFxGraph()).not.toThrow();
     expect(audioNodesRef.value.length).toBe(0);
     expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
+  it("falls back to captureStream when media element sources are unavailable", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const storage = new MemoryStorage();
+    storage.setItem("audio-fx-preset-v1", "radio");
+    const audioElement = document.createElement("audio");
+    const audioRef = ref<HTMLAudioElement | null>(audioElement);
+    const context = new ThrowingMediaSourceAudioContext();
+
+    Object.defineProperty(audioElement, "captureStream", {
+      value: () => ({ getTracks: () => [] }) as unknown as MediaStream,
+      configurable: true,
+    });
+
+    const { ensureAudioContext, refreshAudioFxGraph, audioNodesRef } = useAudioFx(audioRef, {
+      storage,
+      createAudioContext: () => context as unknown as AudioContext,
+    });
+
+    expect(ensureAudioContext()).not.toBeNull();
+    refreshAudioFxGraph();
+    expect(audioNodesRef.value.length).toBeGreaterThan(0);
+    expect(context.lastSource).not.toBeNull();
 
     warnSpy.mockRestore();
   });

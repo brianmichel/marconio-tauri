@@ -17,6 +17,10 @@ type AudioFxOptions = {
 };
 
 type AudioContextCtor = new () => AudioContext;
+type CapturableAudioElement = HTMLAudioElement & {
+  captureStream?: () => MediaStream;
+  mozCaptureStream?: () => MediaStream;
+};
 
 function createDefaultAudioContext(): AudioContext | null {
   const globalScope = globalThis as typeof globalThis & {
@@ -62,9 +66,12 @@ export function useAudioFx(audioRef: Ref<HTMLAudioElement | null>, options: Audi
 
   const audioFxPreset = ref<AudioFxPreset>(readAudioFxPreset(storage));
   const audioContextRef = ref<AudioContext | null>(null);
-  const audioSourceRef = ref<MediaElementAudioSourceNode | null>(null);
+  const audioSourceRef = ref<AudioNode | null>(null);
   const audioNodesRef = ref<AudioNode[]>([]);
+  const capturedStreamRef = ref<MediaStream | null>(null);
   let hasWarnedUnsupportedContext = false;
+  let hasWarnedSourceUnavailable = false;
+  let hasLoggedCaptureFallback = false;
 
   const audioFxLabel = computed(() => {
     return AUDIO_FX_PRESETS.find((preset) => preset.id === audioFxPreset.value)?.label ?? "Clean";
@@ -74,6 +81,41 @@ export function useAudioFx(audioRef: Ref<HTMLAudioElement | null>, options: Audi
     const currentIndex = AUDIO_FX_PRESETS.findIndex((preset) => preset.id === audioFxPreset.value);
     const nextPreset = AUDIO_FX_PRESETS[(currentIndex + 1) % AUDIO_FX_PRESETS.length];
     audioFxPreset.value = nextPreset.id;
+  }
+
+  function createAudioSourceNode(context: AudioContext, audio: HTMLAudioElement): AudioNode | null {
+    try {
+      return context.createMediaElementSource(audio);
+    } catch (error) {
+      console.warn("[audio-fx] Unable to create media element source node", error);
+    }
+
+    const capturableAudio = audio as CapturableAudioElement;
+    const stream =
+      capturableAudio.captureStream?.call(capturableAudio) ??
+      capturableAudio.mozCaptureStream?.call(capturableAudio);
+
+    if (!stream) {
+      if (!hasWarnedSourceUnavailable) {
+        hasWarnedSourceUnavailable = true;
+        console.warn("[audio-fx] No supported media source path available for this stream");
+      }
+      return null;
+    }
+
+    capturedStreamRef.value = stream;
+
+    try {
+      const captureSource = context.createMediaStreamSource(stream);
+      if (!hasLoggedCaptureFallback) {
+        hasLoggedCaptureFallback = true;
+        console.warn("[audio-fx] Using captureStream fallback for audio effects");
+      }
+      return captureSource;
+    } catch (error) {
+      console.warn("[audio-fx] Unable to create media stream source node", error);
+      return null;
+    }
   }
 
   function ensureAudioContext(): AudioContext | null {
@@ -95,10 +137,8 @@ export function useAudioFx(audioRef: Ref<HTMLAudioElement | null>, options: Audi
     }
 
     if (!audioSourceRef.value && audioContextRef.value) {
-      try {
-        audioSourceRef.value = audioContextRef.value.createMediaElementSource(audio);
-      } catch (error) {
-        console.warn("[audio-fx] Unable to create media element source node", error);
+      audioSourceRef.value = createAudioSourceNode(audioContextRef.value, audio);
+      if (!audioSourceRef.value) {
         return null;
       }
     }
@@ -227,7 +267,18 @@ export function useAudioFx(audioRef: Ref<HTMLAudioElement | null>, options: Audi
 
   function teardownAudioFx() {
     clearAudioNodes();
+    try {
+      audioSourceRef.value?.disconnect();
+    } catch {
+      // Ignore disconnect errors.
+    }
     audioSourceRef.value = null;
+    if (capturedStreamRef.value) {
+      for (const track of capturedStreamRef.value.getTracks()) {
+        track.stop();
+      }
+      capturedStreamRef.value = null;
+    }
     if (audioContextRef.value) {
       void audioContextRef.value.close();
       audioContextRef.value = null;
@@ -240,7 +291,7 @@ export function useAudioFx(audioRef: Ref<HTMLAudioElement | null>, options: Audi
     } catch {
       // Ignore storage errors.
     }
-    if (audioContextRef.value && audioSourceRef.value) {
+    if (audioContextRef.value) {
       refreshAudioFxGraph();
     }
   });

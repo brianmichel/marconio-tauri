@@ -308,6 +308,7 @@ async function startPlayback(playable: MediaPlayable, slot: number) {
     const resumePromise = resumeAudioContext();
     await audio.play();
     await resumePromise;
+    refreshAudioFxGraph();
     isPlaying.value = true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
