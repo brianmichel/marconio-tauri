@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marconio — Design Explorer</title>
+<style>
+  /* ── DSEG14 font (from local project assets) ── */
+  @font-face {
+    font-family: "DSEG14";
+    src: url("./src/assets/DSEG14Classic-Bold.ttf") format("truetype");
+    font-weight: 700;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: "DSEG14";
+    src: url("./src/assets/DSEG14Classic-Regular.ttf") format("truetype");
+    font-weight: 400;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: "DSEG14";
+    src: url("./src/assets/DSEG14Classic-Light.ttf") format("truetype");
+    font-weight: 300;
+    font-display: swap;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #111315;
+    color: #e0e0e0;
+    font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 24px 16px 48px;
+    gap: 28px;
+  }
+
+  /* ── CONTROL BAR ── */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    max-width: 700px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(17,19,21,0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 14px 20px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 120px;
+  }
+
+  .control-group label {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #666;
+  }
+
+  .control-group select {
+    -webkit-appearance: none;
+    appearance: none;
+    background: #1e2124;
+    border: 1px solid #3a3e42;
+    border-radius: 4px;
+    color: #c8ccd0;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 24px 5px 8px;
+    cursor: pointer;
+    font-family: inherit;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23888' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+  }
+
+  .control-group select:focus {
+    outline: 1px solid #4a75b4;
+    outline-offset: 0;
+  }
+
+  /* ── PAGE TITLE ── */
+  .page-title {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #555;
+    text-align: center;
+  }
+
+  /* ═══════════════════════════════════════
+     UNIT — The main receiver container
+     ═══════════════════════════════════════ */
+  .unit {
+    --lcd-font: "DSEG14", monospace;
+    --display-font: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    /* blue theme as default */
+    --lcd-border: #2a5f89;
+    --lcd-glow: rgba(208,236,255,0.3);
+    --lcd-top: #6ba6d8;
+    --lcd-mid: #4377ad;
+    --lcd-bottom: #2b567f;
+    --lcd-shadow-strong: rgba(17,49,76,0.35);
+    --lcd-shadow-soft: rgba(17,49,76,0.15);
+    --lcd-ghost: rgba(20,45,71,0.18);
+    --lcd-main-text: #122b44;
+    --lcd-main-glow: rgba(8,30,55,0.24);
+    --lcd-sub-glow: rgba(8,30,55,0.2);
+    --lcd-meta-text: #1d3f62;
+    --lcd-outer-glow: rgba(130,185,255,0.2);
+    --theme-accent-border: #4a75b4;
+    --theme-accent-soft: rgba(77,130,194,0.12);
+    --theme-accent-outline: rgba(108,165,233,0.35);
+    --theme-accent-glow: rgba(108,165,233,0.2);
+    --theme-slot-active: #8fb5e1;
+    --theme-slot-label-active: #7da7d8;
+    --theme-focus-outline: #7fb4ef;
+
+    width: 420px;
+    border: 1px solid #4a4d50;
+    background:
+      linear-gradient(168deg, rgba(255,255,255,0.07) 0%, transparent 22%),
+      linear-gradient(180deg, #2a2e32 0%, #1a1d21 38%, #111417 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.15),
+      inset 0 -1px 0 rgba(0,0,0,0.6),
+      inset 2px 0 6px rgba(0,0,0,0.2),
+      inset -2px 0 6px rgba(0,0,0,0.2),
+      inset 0 -12px 28px rgba(0,0,0,0.4);
+    padding: 6px 8px 5px;
+    color: #f2f2f2;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    border-radius: 8px;
+  }
+
+  /* Scanline overlay */
+  .unit::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,0.012) 0, rgba(255,255,255,0.012) 1px,
+      transparent 1px, transparent 3px
+    );
+    z-index: 1;
+  }
+
+  /* Noise overlay */
+  .unit::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 128px 128px;
+    z-index: 1;
+  }
+
+
+  /* ═══════════════════════════════════════
+     SECTION WRAPPERS — show/hide variants
+     ═══════════════════════════════════════ */
+  .section-slot { position: relative; z-index: 2; }
+  .section-slot > [data-variant] { display: none; }
+  .section-slot > [data-variant].visible { display: block; }
+  /* for flex variants */
+  .section-slot > [data-variant].visible-flex { display: flex; }
+  .section-slot > [data-variant].visible-grid { display: grid; }
+
+
+  /* ═══════════════════════════════════════
+     1. HEADER VARIANTS
+     ═══════════════════════════════════════ */
+
+  /* A: Current — right-aligned brand */
+  .header-a {
+    align-items: center;
+    justify-content: flex-end;
+    min-height: 22px;
+    padding-left: 76px;
+    padding-right: 2px;
+    position: relative;
+    z-index: 8;
+  }
+
+  .header-a .brand {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    color: #d4d6d8;
+    font-family: var(--display-font);
+    text-transform: uppercase;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.5), 0 -1px 0 rgba(255,255,255,0.06);
+  }
+
+  /* B: Chrome Nameplate — centered brand in a metallic strip */
+  .header-b {
+    align-items: center;
+    justify-content: center;
+    min-height: 22px;
+    padding: 0 2px;
+    position: relative;
+    z-index: 8;
+  }
+
+  .header-b .brand-plate {
+    background: linear-gradient(180deg, #b0b4b8 0%, #7a7e82 40%, #8a8e92 60%, #a0a4a8 100%);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-bottom-color: rgba(0,0,0,0.2);
+    border-radius: 2px;
+    padding: 2px 16px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.4),
+      inset 0 -1px 0 rgba(0,0,0,0.1),
+      0 1px 3px rgba(0,0,0,0.4);
+  }
+
+  .header-b .brand {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    color: #2a2d30;
+    font-family: var(--display-font);
+    text-transform: uppercase;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.3);
+  }
+
+  /* C: Split header — brand left, accent line under */
+  .header-c {
+    flex-direction: column;
+    gap: 3px;
+    min-height: 22px;
+    padding: 2px 2px 0;
+    position: relative;
+    z-index: 8;
+  }
+
+  .header-c__top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .header-c .brand {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    color: #c8cacf;
+    font-family: var(--display-font);
+    text-transform: uppercase;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.5);
+  }
+
+  .header-c .brand-sub {
+    font-size: 7px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #555a60;
+    text-transform: uppercase;
+    font-family: var(--display-font);
+  }
+
+  .header-c__line {
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg,
+      var(--theme-accent-border) 0%,
+      rgba(108,165,233,0.15) 40%,
+      transparent 100%
+    );
+  }
+
+  /* D: Wide chrome bar */
+  .header-d {
+    align-items: center;
+    justify-content: flex-end;
+    min-height: 24px;
+    padding: 0 8px;
+    position: relative;
+    z-index: 8;
+    background:
+      linear-gradient(180deg,
+        rgba(180,184,190,0.12) 0%,
+        rgba(100,104,110,0.06) 50%,
+        transparent 100%
+      );
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    margin: -6px -8px 0;
+    padding-top: 6px;
+    padding-right: 10px;
+  }
+
+  .header-d .brand {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    color: #e0e2e5;
+    font-family: var(--display-font);
+    text-transform: uppercase;
+    text-shadow:
+      0 1px 0 rgba(0,0,0,0.4),
+      0 0 8px rgba(255,255,255,0.06);
+  }
+
+
+  /* ═══════════════════════════════════════
+     2. LCD VARIANTS
+     ═══════════════════════════════════════ */
+
+  /* Shared LCD structure */
+  .lcd-base {
+    border-radius: 4px;
+    padding: 8px 10px 6px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .lcd-row {
+    overflow: hidden;
+    white-space: nowrap;
+    font-family: var(--lcd-font);
+    text-transform: uppercase;
+    letter-spacing: 0;
+    line-height: 1;
+  }
+
+  .lcd-cell {
+    display: inline-block;
+    position: relative;
+    text-align: center;
+    vertical-align: top;
+  }
+
+  .lcd-cell-ghost { color: var(--lcd-ghost); }
+
+  .lcd-cell-text {
+    position: absolute;
+    top: 0; left: 0; width: 100%;
+  }
+
+  .lcd-row--main { font-size: 20px; font-weight: 700; }
+  .lcd-row--main .lcd-cell { letter-spacing: 0.04em; }
+  .lcd-row--main .lcd-cell-text {
+    color: var(--lcd-main-text);
+    text-shadow: 0 0 3px var(--lcd-main-glow);
+  }
+
+  .lcd-row--sub { font-size: 10px; font-weight: 700; margin-top: 4px; }
+  .lcd-row--sub .lcd-cell-text {
+    color: var(--lcd-main-text);
+    text-shadow: 0 0 2px var(--lcd-sub-glow);
+  }
+
+  .lcd-row--meta { font-size: 8px; font-weight: 700; margin-top: 4px; }
+  .lcd-row--meta .lcd-cell-ghost { opacity: 0.6; }
+  .lcd-row--meta .lcd-cell-text {
+    color: var(--lcd-meta-text);
+    opacity: 0.7;
+  }
+
+  /* Glow wander animation */
+  @keyframes lcd-glow-wander {
+    0%, 100% { transform: translate(-10%,-6%); }
+    33% { transform: translate(14%,10%); }
+    66% { transform: translate(-5%,-12%); }
+  }
+
+  /* A: Current LCD */
+  .lcd-a {
+    border: 1px solid var(--lcd-border);
+    background:
+      radial-gradient(120% 100% at 8% -10%, var(--lcd-glow), transparent 50%),
+      linear-gradient(180deg, var(--lcd-top) 0%, var(--lcd-mid) 50%, var(--lcd-bottom) 100%);
+    box-shadow:
+      inset 0 2px 4px rgba(0,0,0,0.15),
+      inset 0 -3px 8px var(--lcd-shadow-strong),
+      inset 2px 0 6px var(--lcd-shadow-soft),
+      inset -2px 0 6px var(--lcd-shadow-soft),
+      0 1px 0 rgba(255,255,255,0.06),
+      0 3px 12px rgba(0,0,0,0.35),
+      0 0 18px var(--lcd-outer-glow),
+      0 0 48px var(--lcd-outer-glow);
+  }
+
+  /* Noise texture */
+  .lcd-a::before {
+    content: "";
+    position: absolute; inset: 0; border-radius: inherit;
+    pointer-events: none; opacity: 0.06;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 128px 128px;
+    z-index: 0;
+  }
+
+  .lcd-a::after {
+    content: "";
+    position: absolute; inset: -30%; border-radius: 50%;
+    background: radial-gradient(ellipse at center, var(--lcd-glow), transparent 55%);
+    opacity: 0.8;
+    animation: lcd-glow-wander 11s ease-in-out infinite;
+    pointer-events: none;
+    mix-blend-mode: soft-light;
+    z-index: 1;
+  }
+
+  /* B: Chrome-Lipped Inset LCD */
+  .lcd-b {
+    border: 2px solid rgba(160,165,172,0.3);
+    background:
+      radial-gradient(120% 100% at 8% -10%, var(--lcd-glow), transparent 50%),
+      linear-gradient(180deg, var(--lcd-top) 0%, var(--lcd-mid) 50%, var(--lcd-bottom) 100%);
+    box-shadow:
+      inset 0 3px 8px rgba(0,0,0,0.3),
+      inset 0 -3px 8px var(--lcd-shadow-strong),
+      inset 3px 0 8px var(--lcd-shadow-soft),
+      inset -3px 0 8px var(--lcd-shadow-soft),
+      0 1px 0 rgba(255,255,255,0.12),
+      0 -1px 0 rgba(0,0,0,0.3),
+      0 3px 12px rgba(0,0,0,0.35),
+      0 0 18px var(--lcd-outer-glow);
+    border-radius: 3px;
+  }
+
+  .lcd-b::before {
+    content: "";
+    position: absolute; inset: 0; border-radius: inherit;
+    pointer-events: none; opacity: 0.06;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 128px 128px;
+    z-index: 0;
+  }
+
+  .lcd-b::after {
+    content: "";
+    position: absolute; inset: -30%; border-radius: 50%;
+    background: radial-gradient(ellipse at center, var(--lcd-glow), transparent 55%);
+    opacity: 0.6;
+    animation: lcd-glow-wander 11s ease-in-out infinite;
+    pointer-events: none; mix-blend-mode: soft-light; z-index: 1;
+  }
+
+  /* C: Smoked Glass LCD — darker, more contrast */
+  .lcd-c {
+    border: 1px solid rgba(40,50,65,0.6);
+    background:
+      radial-gradient(120% 100% at 8% -10%, rgba(80,140,200,0.08), transparent 50%),
+      linear-gradient(180deg, #1e3248 0%, #152538 50%, #0f1c2c 100%);
+    box-shadow:
+      inset 0 2px 6px rgba(0,0,0,0.4),
+      inset 0 -3px 8px rgba(0,0,0,0.35),
+      inset 2px 0 6px rgba(0,0,0,0.2),
+      inset -2px 0 6px rgba(0,0,0,0.2),
+      0 1px 0 rgba(255,255,255,0.06),
+      0 3px 12px rgba(0,0,0,0.35),
+      0 0 18px rgba(60,120,200,0.08);
+    border-radius: 4px;
+  }
+
+  .lcd-c .lcd-cell-ghost { color: rgba(40,70,110,0.2); }
+  .lcd-c .lcd-row--main .lcd-cell-text {
+    color: #5a9ed6;
+    text-shadow: 0 0 6px rgba(90,158,214,0.4), 0 0 14px rgba(90,158,214,0.15);
+  }
+  .lcd-c .lcd-row--sub .lcd-cell-text {
+    color: #4a8ac0;
+    text-shadow: 0 0 4px rgba(74,138,192,0.3);
+  }
+  .lcd-c .lcd-row--meta .lcd-cell-text { color: #3a6a96; }
+
+  .lcd-c::before {
+    content: "";
+    position: absolute; inset: 0; border-radius: inherit;
+    pointer-events: none; opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 128px 128px;
+  }
+
+  .lcd-c::after {
+    content: "";
+    position: absolute; inset: -30%; border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(80,160,240,0.12), transparent 55%);
+    opacity: 0.7;
+    animation: lcd-glow-wander 11s ease-in-out infinite;
+    pointer-events: none; mix-blend-mode: soft-light; z-index: 1;
+  }
+
+  /* D: VFD style — dark glass with bright cyan-green text */
+  .lcd-d {
+    border: 1px solid rgba(20,30,25,0.6);
+    background:
+      linear-gradient(180deg, #0a100e 0%, #060c0a 50%, #040806 100%);
+    box-shadow:
+      inset 0 2px 6px rgba(0,0,0,0.5),
+      inset 0 -2px 4px rgba(0,0,0,0.3),
+      0 1px 0 rgba(255,255,255,0.06),
+      0 3px 12px rgba(0,0,0,0.35),
+      0 0 24px rgba(0,220,180,0.06);
+    border-radius: 4px;
+  }
+
+  .lcd-d .lcd-cell-ghost { color: rgba(0,80,60,0.12); }
+  .lcd-d .lcd-row--main .lcd-cell-text {
+    color: #00d4a8;
+    text-shadow: 0 0 6px rgba(0,212,168,0.5), 0 0 18px rgba(0,212,168,0.2);
+  }
+  .lcd-d .lcd-row--sub .lcd-cell-text {
+    color: #00b890;
+    text-shadow: 0 0 4px rgba(0,184,144,0.4);
+  }
+  .lcd-d .lcd-row--meta .lcd-cell-text { color: #008868; opacity: 0.85; }
+
+  .lcd-d::before {
+    content: "";
+    position: absolute; inset: 0; border-radius: inherit;
+    pointer-events: none; opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 128px 128px;
+  }
+
+  .lcd-d::after { display: none; }
+
+
+  /* ═══════════════════════════════════════
+     3. PRESET GRID VARIANTS
+     ═══════════════════════════════════════ */
+
+  .grid-3x2 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    min-height: 0;
+    flex: 1;
+  }
+
+  /* A: Current */
+  .preset-a { height: 150px; }
+  .preset-a .card {
+    border-radius: 6px;
+    border: 1px solid #0a0b0d;
+    background: linear-gradient(180deg, #080a0c 0%, #0d0f11 100%);
+    box-shadow:
+      inset 0 2px 4px rgba(0,0,0,0.6),
+      inset 0 -1px 2px rgba(255,255,255,0.03),
+      0 1px 0 rgba(255,255,255,0.04);
+    padding: 3px;
+    display: flex; flex-direction: column;
+    transition: border-color 280ms ease, box-shadow 280ms ease;
+  }
+  .preset-a .card.active {
+    border-color: var(--theme-accent-border);
+    box-shadow:
+      inset 0 2px 4px rgba(0,0,0,0.5),
+      inset 0 0 8px var(--theme-accent-soft),
+      0 0 0 1px var(--theme-accent-outline),
+      0 0 12px var(--theme-accent-glow);
+  }
+  .preset-a .btn {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; flex: 1; min-height: 0;
+    border: none; border-radius: 4px; color: #656e76;
+    background: linear-gradient(180deg, #2c3035 0%, #222629 30%, #1a1d20 70%, #141618 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.1),
+      inset 1px 0 0 rgba(255,255,255,0.04),
+      inset -1px 0 0 rgba(255,255,255,0.04),
+      inset 0 -2px 3px rgba(0,0,0,0.25),
+      0 2px 3px rgba(0,0,0,0.5), 0 4px 8px rgba(0,0,0,0.25);
+    cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; padding: 4px 4px 6px;
+    transition: box-shadow 60ms ease, transform 60ms ease, background 60ms ease;
+  }
+  .preset-a .btn:hover { background: linear-gradient(180deg, #333840 0%, #282c30 30%, #1e2124 70%, #181a1d 100%); }
+  .preset-a .btn:active { transform: translateY(1.5px); background: linear-gradient(180deg, #1e2124 0%, #1a1d20 40%, #161819 100%); box-shadow: inset 0 1px 3px rgba(0,0,0,0.4); }
+  .preset-a .num { font-size: 28px; line-height: 1; font-weight: 800; color: #555e66; font-family: var(--display-font); text-shadow: 0 1px 0 rgba(0,0,0,0.4); transition: color 280ms ease; }
+  .preset-a .card.active .num { color: var(--theme-slot-active); }
+  .preset-a .lbl { font-weight: 750; font-size: 8px; line-height: 1; letter-spacing: 0.08em; color: #555e66; text-transform: uppercase; font-family: var(--display-font); text-shadow: 0 1px 0 rgba(0,0,0,0.3); max-width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; transition: color 280ms ease; }
+  .preset-a .card.active .lbl { color: var(--theme-slot-label-active); }
+
+  /* B: Chrome Bezel */
+  .preset-b { height: 150px; }
+  .preset-b .card {
+    border-radius: 4px;
+    border: 1px solid rgba(180,185,192,0.35);
+    background: linear-gradient(180deg, rgba(160,165,172,0.18) 0%, rgba(100,105,112,0.1) 3px, rgba(8,10,14,0.95) 3px, rgba(14,16,20,0.95) 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.5), 0 0 0 0.5px rgba(0,0,0,0.6);
+    padding: 0; display: flex; flex-direction: column;
+    transition: border-color 200ms ease, box-shadow 200ms ease; overflow: hidden;
+  }
+  .preset-b .card.active { border-color: rgba(180,190,210,0.45); box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(0,0,0,0.4), 0 0 0 1px var(--theme-accent-outline), 0 0 14px var(--theme-accent-glow), 0 1px 2px rgba(0,0,0,0.5); }
+  .preset-b .btn {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; flex: 1; min-height: 0; border: none; border-radius: 2px;
+    background: linear-gradient(180deg, rgba(32,36,42,1) 0%, rgba(22,25,30,1) 40%, rgba(16,18,22,1) 100%);
+    color: #555c64; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; padding: 4px 4px 6px; margin: 2px;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.4), inset 0 -1px 0 rgba(255,255,255,0.03);
+    transition: background 100ms ease;
+  }
+  .preset-b .btn:hover { background: linear-gradient(180deg, rgba(40,44,52,1) 0%, rgba(28,32,38,1) 40%, rgba(20,22,28,1) 100%); }
+  .preset-b .btn:active { background: linear-gradient(180deg, rgba(18,20,24,1) 0%, rgba(14,16,20,1) 100%); box-shadow: inset 0 2px 5px rgba(0,0,0,0.6); }
+  .preset-b .num { font-size: 26px; line-height: 1; font-weight: 800; color: #4a5058; font-family: var(--display-font); text-shadow: 0 1px 0 rgba(0,0,0,0.5); transition: color 200ms ease; }
+  .preset-b .card.active .num { color: var(--theme-slot-active); text-shadow: 0 0 8px var(--theme-accent-glow); }
+  .preset-b .lbl { font-weight: 750; font-size: 7px; line-height: 1; letter-spacing: 0.1em; color: #4a5058; text-transform: uppercase; font-family: var(--display-font); max-width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; transition: color 200ms ease; }
+  .preset-b .card.active .lbl { color: var(--theme-slot-label-active); }
+
+  /* C: Backlit Membrane */
+  .preset-c-shell {
+    background: linear-gradient(180deg, rgba(8,10,14,0.95) 0%, rgba(12,14,18,0.95) 100%);
+    border: 1px solid rgba(0,0,0,0.5); border-radius: 5px;
+    box-shadow: inset 0 1px 4px rgba(0,0,0,0.5), inset 0 -1px 0 rgba(255,255,255,0.03), 0 1px 0 rgba(255,255,255,0.04);
+    padding: 4px;
+  }
+  .preset-c { height: 146px; background: rgba(0,0,0,0.3); border-radius: 3px; overflow: hidden; }
+  .preset-c .btn {
+    -webkit-appearance: none; appearance: none; border: none;
+    background: linear-gradient(180deg, rgba(20,23,28,1) 0%, rgba(16,18,22,1) 100%);
+    color: #484e56; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; padding: 4px 4px 6px; transition: all 180ms ease; position: relative;
+  }
+  .preset-c .btn::after {
+    content: ""; position: absolute; inset: 0; opacity: 0;
+    background: radial-gradient(ellipse at center, var(--theme-accent-glow) 0%, transparent 70%);
+    transition: opacity 250ms ease; pointer-events: none;
+  }
+  .preset-c .btn:hover { background: linear-gradient(180deg, rgba(26,30,36,1) 0%, rgba(20,22,28,1) 100%); color: #6a7078; }
+  .preset-c .btn.active { color: #8aa0b8; }
+  .preset-c .btn.active::after { opacity: 1; }
+  .preset-c .num { font-size: 26px; line-height: 1; font-weight: 800; font-family: var(--display-font); transition: color 250ms ease, text-shadow 250ms ease; position: relative; z-index: 1; }
+  .preset-c .btn.active .num { color: var(--theme-slot-active); text-shadow: 0 0 12px var(--theme-accent-glow), 0 0 24px rgba(106,180,255,0.15); }
+  .preset-c .lbl { font-weight: 750; font-size: 7.5px; line-height: 1; letter-spacing: 0.08em; text-transform: uppercase; font-family: var(--display-font); max-width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; transition: color 250ms ease; position: relative; z-index: 1; }
+  .preset-c .btn.active .lbl { color: var(--theme-slot-label-active); text-shadow: 0 0 8px var(--theme-accent-glow); }
+
+  /* D: LED Edge Ring */
+  .preset-d { height: 150px; }
+  .preset-d .card {
+    border-radius: 5px; border: 2px solid transparent;
+    background: linear-gradient(180deg, #0c0e12 0%, #101216 100%);
+    padding: 0; display: flex; flex-direction: column;
+    transition: border-color 200ms ease, box-shadow 200ms ease; position: relative; overflow: hidden;
+  }
+  .preset-d .card::before {
+    content: ""; position: absolute; inset: -2px; border-radius: 6px;
+    border: 2px solid transparent;
+    transition: border-color 250ms ease, box-shadow 250ms ease; pointer-events: none; z-index: 3;
+  }
+  .preset-d .card.active::before {
+    border-color: #6ab4ff;
+    box-shadow: 0 0 6px rgba(106,180,255,0.7), inset 0 0 6px rgba(106,180,255,0.7);
+  }
+  .preset-d .btn {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; flex: 1; min-height: 0; border: none; border-radius: 3px;
+    background: linear-gradient(180deg, rgba(38,42,48,1) 0%, rgba(26,29,34,1) 35%, rgba(18,20,24,1) 100%);
+    color: #555c64; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; padding: 4px 4px 6px; margin: 2px;
+    transition: background 80ms ease, transform 80ms ease;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 4px rgba(0,0,0,0.4);
+  }
+  .preset-d .btn:hover { background: linear-gradient(180deg, rgba(46,50,58,1) 0%, rgba(32,36,42,1) 35%, rgba(22,24,30,1) 100%); color: #7a828a; }
+  .preset-d .btn:active { transform: translateY(1px); box-shadow: inset 0 1px 3px rgba(0,0,0,0.4); }
+  .preset-d .num { font-size: 28px; line-height: 1; font-weight: 800; color: inherit; font-family: var(--display-font); text-shadow: 0 1px 0 rgba(0,0,0,0.5); transition: color 200ms ease; }
+  .preset-d .card.active .num { color: var(--theme-slot-active); }
+  .preset-d .lbl { font-weight: 750; font-size: 7.5px; line-height: 1; letter-spacing: 0.08em; color: inherit; text-transform: uppercase; font-family: var(--display-font); max-width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; transition: color 200ms ease; }
+  .preset-d .card.active .lbl { color: var(--theme-slot-label-active); }
+
+
+  /* ═══════════════════════════════════════
+     4. FX SELECTOR VARIANTS
+     ═══════════════════════════════════════ */
+
+  /* A: Original Segmented */
+  .fx-a {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 3px; border: 1px solid rgba(255,255,255,0.15); border-radius: 5px; padding: 3px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%), rgba(5,7,10,0.55);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.45);
+    margin-top: 1px;
+  }
+  .fx-a button {
+    -webkit-appearance: none; appearance: none;
+    border: 1px solid transparent; border-radius: 3px;
+    background: rgba(34,39,46,0.65); color: #9fa6ae;
+    font-family: var(--display-font); font-size: 8px; font-weight: 800;
+    letter-spacing: 0.12em; padding: 5px 4px; text-transform: uppercase;
+    cursor: pointer; transition: all 140ms ease;
+  }
+  .fx-a button:hover { background: rgba(52,61,72,0.82); color: #d6dbe1; }
+  .fx-a button.active {
+    background: linear-gradient(180deg, var(--theme-accent-soft) 0%, rgba(10,12,16,0.6) 100%), rgba(28,33,39,0.82);
+    border-color: var(--theme-accent-border); color: var(--theme-slot-label-active);
+    text-shadow: 0 0 7px var(--theme-accent-glow);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), inset 0 0 10px var(--theme-accent-soft), 0 0 0 1px var(--theme-accent-outline), 0 0 10px var(--theme-accent-glow);
+  }
+
+  /* B: LED Pip Push Buttons */
+  .fx-b {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px; padding: 2px 0; margin-top: 1px;
+  }
+  .fx-b button {
+    -webkit-appearance: none; appearance: none;
+    border: 1px solid rgba(255,255,255,0.08); border-bottom-color: rgba(0,0,0,0.3); border-radius: 3px;
+    background: linear-gradient(180deg, rgba(60,65,72,0.9) 0%, rgba(36,40,46,0.95) 40%, rgba(30,34,40,0.95) 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 4px rgba(0,0,0,0.5), 0 1px 1px rgba(0,0,0,0.3);
+    color: #6e747a; font-family: var(--display-font); font-size: 7.5px; font-weight: 800;
+    letter-spacing: 0.1em; padding: 8px 4px 6px; text-transform: uppercase;
+    cursor: pointer; transition: all 120ms ease;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+  }
+  .fx-b button::before {
+    content: ""; width: 5px; height: 5px; border-radius: 50%;
+    background: #1a1c1e; border: 1px solid rgba(255,255,255,0.05);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.5); transition: all 180ms ease;
+  }
+  .fx-b button:hover { background: linear-gradient(180deg, rgba(70,76,84,0.95) 0%, rgba(42,47,54,0.95) 40%, rgba(36,40,46,0.95) 100%); color: #a0a6ac; }
+  .fx-b button:active { box-shadow: inset 0 1px 3px rgba(0,0,0,0.4), 0 0 1px rgba(0,0,0,0.2); transform: translateY(1px); }
+  .fx-b button.active { color: #c8d0d8; border-color: rgba(255,255,255,0.12); }
+  .fx-b button.active::before {
+    background: var(--theme-accent-border); border-color: transparent;
+    box-shadow: 0 0 4px var(--theme-accent-glow), 0 0 10px var(--theme-accent-glow), inset 0 -1px 1px rgba(0,0,0,0.2);
+  }
+
+  /* C: Sliding Indicator */
+  .fx-c {
+    position: relative; margin-top: 1px;
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 4px;
+    background: linear-gradient(180deg, rgba(10,12,16,0.8) 0%, rgba(18,21,25,0.9) 100%);
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.5), inset 0 -1px 0 rgba(255,255,255,0.04), 0 1px 0 rgba(255,255,255,0.04);
+    padding: 3px; grid-template-columns: repeat(4, 1fr); gap: 0; overflow: hidden;
+  }
+  .fx-c__track {
+    position: absolute; top: 3px; bottom: 3px; left: 3px;
+    width: calc(25% - 3px); border-radius: 3px;
+    background: linear-gradient(180deg, rgba(77,130,194,0.18) 0%, rgba(40,70,120,0.12) 50%, rgba(20,40,70,0.08) 100%);
+    border: 1px solid var(--theme-accent-border);
+    box-shadow: 0 0 12px var(--theme-accent-glow), inset 0 1px 0 rgba(255,255,255,0.12), inset 0 0 8px rgba(77,130,194,0.1);
+    transition: transform 200ms cubic-bezier(0.4,0,0.2,1); z-index: 1; pointer-events: none;
+  }
+  .fx-c__track[data-pos="0"] { transform: translateX(0); }
+  .fx-c__track[data-pos="1"] { transform: translateX(calc(100% + 3px)); }
+  .fx-c__track[data-pos="2"] { transform: translateX(calc(200% + 6px)); }
+  .fx-c__track[data-pos="3"] { transform: translateX(calc(300% + 9px)); }
+  .fx-c button {
+    -webkit-appearance: none; appearance: none; border: none; border-radius: 3px;
+    background: transparent; color: #5a6068;
+    font-family: var(--display-font); font-size: 7.5px; font-weight: 800;
+    letter-spacing: 0.1em; padding: 6px 4px; text-transform: uppercase;
+    cursor: pointer; transition: color 200ms ease; position: relative; z-index: 2;
+  }
+  .fx-c button:hover { color: #8a9098; }
+  .fx-c button.active { color: #8fbae8; text-shadow: 0 0 8px var(--theme-accent-glow); }
+
+  /* D: Recessed + LED Bar */
+  .fx-d {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px; margin-top: 1px;
+  }
+  .fx-d button {
+    -webkit-appearance: none; appearance: none;
+    border: 1px solid rgba(0,0,0,0.4); border-top-color: rgba(0,0,0,0.5); border-radius: 2px;
+    background: linear-gradient(180deg, rgba(16,18,22,0.95) 0%, rgba(24,27,32,0.95) 50%, rgba(20,22,26,0.95) 100%);
+    box-shadow: inset 0 1px 4px rgba(0,0,0,0.4), inset 0 -1px 0 rgba(255,255,255,0.03), 0 1px 0 rgba(255,255,255,0.05);
+    color: #555a60; font-family: var(--display-font); font-size: 7px; font-weight: 800;
+    letter-spacing: 0.12em; padding: 7px 4px 6px; text-transform: uppercase;
+    cursor: pointer; transition: all 140ms ease; position: relative; overflow: hidden;
+  }
+  .fx-d button::before {
+    content: ""; position: absolute; top: 0; left: 20%; right: 20%; height: 2px;
+    border-radius: 0 0 2px 2px; background: rgba(40,44,50,0.8); transition: all 180ms ease;
+  }
+  .fx-d button:hover { color: #8a8f96; background: linear-gradient(180deg, rgba(22,25,30,0.95) 0%, rgba(30,34,40,0.95) 50%, rgba(26,29,34,0.95) 100%); }
+  .fx-d button.active { color: #b8c4d2; border-color: rgba(77,130,194,0.2); background: linear-gradient(180deg, rgba(20,24,30,0.95) 0%, rgba(26,30,38,0.95) 50%, rgba(22,26,32,0.95) 100%); box-shadow: inset 0 1px 4px rgba(0,0,0,0.3), inset 0 0 12px rgba(77,130,194,0.04); }
+  .fx-d button.active::before { background: #6ab4ff; left: 15%; right: 15%; box-shadow: 0 0 4px rgba(106,180,255,0.7), 0 1px 6px rgba(106,180,255,0.7), 0 2px 12px rgba(106,180,255,0.3); }
+
+
+  /* ═══════════════════════════════════════
+     5. FOOTER VARIANTS
+     ═══════════════════════════════════════ */
+
+  /* A: Current */
+  .footer-a {
+    margin-top: 0; padding-top: 4px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    justify-content: space-between; gap: 8px; align-items: center;
+    position: relative; z-index: 8;
+  }
+  .footer-a .tagline, .footer-b .tagline, .footer-c .tagline, .footer-d .tagline {
+    margin: 0; color: #6b6560; font-style: normal; font-weight: 600; font-size: 8px;
+    letter-spacing: 0.22em; font-family: var(--display-font); text-transform: uppercase;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.06);
+  }
+  .model-badge {
+    -webkit-appearance: none; appearance: none; margin: 0;
+    border: 1px solid rgba(255,255,255,0.15); border-bottom-color: rgba(0,0,0,0.25);
+    background: linear-gradient(180deg, #b8bcc0 0%, #8a8e92 40%, #9a9ea2 60%, #a8acb0 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -1px 0 rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.3);
+    color: #2a2d30; border-radius: 2px; padding: 1px 6px; font-weight: 800;
+    letter-spacing: 0.18em; font-family: var(--display-font); font-size: 8px;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.3); cursor: default;
+  }
+
+  /* B: Centered with accent lines */
+  .footer-b {
+    margin-top: 0; padding-top: 4px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    flex-direction: column; align-items: center; gap: 4px;
+    position: relative; z-index: 8;
+  }
+  .footer-b__row {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+  }
+  .footer-b__line {
+    flex: 1; height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 50%, transparent 100%);
+  }
+  .footer-b .tagline { white-space: nowrap; color: #585550; }
+  .footer-b .model-sub {
+    font-size: 7px; font-weight: 700; letter-spacing: 0.14em;
+    color: #4a4844; font-family: var(--display-font); text-transform: uppercase;
+  }
+
+  /* C: Engraved/Debossed */
+  .footer-c {
+    margin-top: 0; padding-top: 5px;
+    border-top: 1px solid rgba(0,0,0,0.2);
+    justify-content: space-between; gap: 8px; align-items: center;
+    position: relative; z-index: 8;
+  }
+  .footer-c .tagline {
+    color: rgba(255,255,255,0.08);
+    text-shadow: 0 1px 0 rgba(255,255,255,0.04), 0 -1px 0 rgba(0,0,0,0.4);
+    font-weight: 700; letter-spacing: 0.2em;
+  }
+  .footer-c .model-engraved {
+    font-size: 8px; font-weight: 800; letter-spacing: 0.18em;
+    font-family: var(--display-font); text-transform: uppercase;
+    color: rgba(255,255,255,0.08);
+    text-shadow: 0 1px 0 rgba(255,255,255,0.04), 0 -1px 0 rgba(0,0,0,0.4);
+  }
+
+  /* D: LED-accent footer */
+  .footer-d {
+    margin-top: 0; padding-top: 4px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    justify-content: space-between; gap: 8px; align-items: center;
+    position: relative; z-index: 8;
+  }
+  .footer-d .tagline { color: #555; }
+  .footer-d .model-led-badge {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 8px; font-weight: 800; letter-spacing: 0.16em;
+    font-family: var(--display-font); text-transform: uppercase; color: #6e747a;
+  }
+  .footer-d .model-led {
+    width: 4px; height: 4px; border-radius: 50%;
+    background: #6ab4ff;
+    box-shadow: 0 0 4px rgba(106,180,255,0.7), 0 0 8px rgba(106,180,255,0.5);
+  }
+</style>
+</head>
+<body>
+
+<p class="page-title">Marconio — Design Explorer</p>
+
+<div class="controls">
+  <div class="control-group">
+    <label>Header</label>
+    <select id="sel-header" onchange="swap('header', this.value)">
+      <option value="a">A: Current</option>
+      <option value="b">B: Chrome Nameplate</option>
+      <option value="c">C: Split + Accent Line</option>
+      <option value="d">D: Wide Chrome Bar</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <label>LCD Panel</label>
+    <select id="sel-lcd" onchange="swap('lcd', this.value)">
+      <option value="a">A: Current</option>
+      <option value="b">B: Chrome-Lipped Inset</option>
+      <option value="c">C: Smoked Glass</option>
+      <option value="d">D: VFD Tube</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <label>Preset Grid</label>
+    <select id="sel-preset" onchange="swap('preset', this.value)">
+      <option value="a">A: Current</option>
+      <option value="b">B: Chrome Bezel</option>
+      <option value="c">C: Backlit Membrane</option>
+      <option value="d">D: LED Edge Ring</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <label>FX Selector</label>
+    <select id="sel-fx" onchange="swap('fx', this.value)">
+      <option value="a">A: Original Segmented</option>
+      <option value="b">B: LED Pip Buttons</option>
+      <option value="c">C: Sliding Indicator</option>
+      <option value="d">D: Recessed + LED Bar</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <label>Footer</label>
+    <select id="sel-footer" onchange="swap('footer', this.value)">
+      <option value="a">A: Current</option>
+      <option value="b">B: Centered + Lines</option>
+      <option value="c">C: Engraved</option>
+      <option value="d">D: LED Accent</option>
+    </select>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════ -->
+<!--        THE UNIT                     -->
+<!-- ════════════════════════════════════ -->
+<div class="unit">
+
+  <!-- === HEADER === -->
+  <div class="section-slot" id="slot-header">
+    <header data-variant="a" class="header-a visible-flex">
+      <p class="brand">MARCONIO</p>
+    </header>
+    <header data-variant="b" class="header-b">
+      <div class="brand-plate"><p class="brand">MARCONIO</p></div>
+    </header>
+    <header data-variant="c" class="header-c">
+      <div class="header-c__top">
+        <p class="brand">MARCONIO</p>
+        <span class="brand-sub">Streaming Receiver</span>
+      </div>
+      <div class="header-c__line"></div>
+    </header>
+    <header data-variant="d" class="header-d">
+      <p class="brand">MARCONIO</p>
+    </header>
+  </div>
+
+  <!-- === LCD === -->
+  <div class="section-slot" id="slot-lcd">
+    <section data-variant="a" class="lcd-base lcd-a visible">
+      <div class="lcd-row lcd-row--main"><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">N</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">O</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">T</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">!</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">P</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">L</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">A</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">Y</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">I</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">N</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">G</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">!</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">!</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">!</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">!</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">!</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">!</span></span><span class="lcd-cell" style="letter-spacing:0.04em"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">!</span></span></div>
+      <div class="lcd-row lcd-row--sub"><span class="lcd-cell"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">S</span></span><span class="lcd-cell"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">T</span></span><span class="lcd-cell"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">O</span></span><span class="lcd-cell"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">P</span></span><span class="lcd-cell"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">!</span></span><span class="lcd-cell"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">R</span></span><span class="lcd-cell"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">E</span></span><span class="lcd-cell"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">A</span></span><span class="lcd-cell"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">D</span></span><span class="lcd-cell"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">Y</span></span></div>
+      <div class="lcd-row lcd-row--meta"><span class="lcd-cell"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">!</span></span><span class="lcd-cell"><span class="lcd-cell-ghost">~</span><span class="lcd-cell-text">!</span></span></div>
+    </section>
+    <section data-variant="b" class="lcd-base lcd-b"></section>
+    <section data-variant="c" class="lcd-base lcd-c"></section>
+    <section data-variant="d" class="lcd-base lcd-d"></section>
+  </div>
+
+  <!-- === PRESET GRID === -->
+  <div class="section-slot" id="slot-preset">
+    <!-- A: Current -->
+    <div data-variant="a" class="grid-3x2 preset-a visible-grid">
+      <article class="card active" onclick="activateCard(this)"><button class="btn"><span class="num">1</span><span class="lbl">CH</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">2</span><span class="lbl">CH</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">3</span><span class="lbl">Sweat</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">4</span><span class="lbl">Sheet Music</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">5</span><span class="lbl">4 to the Floor</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">6</span><span class="lbl">Low Key</span></button></article>
+    </div>
+    <!-- B: Chrome Bezel -->
+    <div data-variant="b" class="grid-3x2 preset-b">
+      <article class="card active" onclick="activateCard(this)"><button class="btn"><span class="num">1</span><span class="lbl">CH</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">2</span><span class="lbl">CH</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">3</span><span class="lbl">Sweat</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">4</span><span class="lbl">Sheet Music</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">5</span><span class="lbl">4 to the Floor</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">6</span><span class="lbl">Low Key</span></button></article>
+    </div>
+    <!-- C: Backlit Membrane -->
+    <div data-variant="c" class="preset-c-shell">
+      <div class="grid-3x2 preset-c">
+        <button class="btn active" onclick="activateFlat(this)"><span class="num">1</span><span class="lbl">CH</span></button>
+        <button class="btn" onclick="activateFlat(this)"><span class="num">2</span><span class="lbl">CH</span></button>
+        <button class="btn" onclick="activateFlat(this)"><span class="num">3</span><span class="lbl">Sweat</span></button>
+        <button class="btn" onclick="activateFlat(this)"><span class="num">4</span><span class="lbl">Sheet Music</span></button>
+        <button class="btn" onclick="activateFlat(this)"><span class="num">5</span><span class="lbl">4 to the Floor</span></button>
+        <button class="btn" onclick="activateFlat(this)"><span class="num">6</span><span class="lbl">Low Key</span></button>
+      </div>
+    </div>
+    <!-- D: LED Edge Ring -->
+    <div data-variant="d" class="grid-3x2 preset-d">
+      <article class="card active" onclick="activateCard(this)"><button class="btn"><span class="num">1</span><span class="lbl">CH</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">2</span><span class="lbl">CH</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">3</span><span class="lbl">Sweat</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">4</span><span class="lbl">Sheet Music</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">5</span><span class="lbl">4 to the Floor</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">6</span><span class="lbl">Low Key</span></button></article>
+    </div>
+  </div>
+
+  <!-- === FX SELECTOR === -->
+  <div class="section-slot" id="slot-fx">
+    <!-- A: Original Segmented -->
+    <div data-variant="a" class="fx-a visible-grid">
+      <button class="active" onclick="activateFx(this)">Clean</button>
+      <button onclick="activateFx(this)">Mag</button>
+      <button onclick="activateFx(this)">Bass+</button>
+      <button onclick="activateFx(this)">Radio</button>
+    </div>
+    <!-- B: LED Pip Buttons -->
+    <div data-variant="b" class="fx-b">
+      <button class="active" onclick="activateFx(this)">Clean</button>
+      <button onclick="activateFx(this)">Mag</button>
+      <button onclick="activateFx(this)">Bass+</button>
+      <button onclick="activateFx(this)">Radio</button>
+    </div>
+    <!-- C: Sliding Indicator -->
+    <div data-variant="c" class="fx-c" id="fx-rocker">
+      <div class="fx-c__track" data-pos="0" id="fx-track"></div>
+      <button class="active" onclick="activateSlider(this, 0)">Clean</button>
+      <button onclick="activateSlider(this, 1)">Mag</button>
+      <button onclick="activateSlider(this, 2)">Bass+</button>
+      <button onclick="activateSlider(this, 3)">Radio</button>
+    </div>
+    <!-- D: Recessed + LED Bar -->
+    <div data-variant="d" class="fx-d">
+      <button class="active" onclick="activateFx(this)">Clean</button>
+      <button onclick="activateFx(this)">Mag</button>
+      <button onclick="activateFx(this)">Bass+</button>
+      <button onclick="activateFx(this)">Radio</button>
+    </div>
+  </div>
+
+  <!-- === FOOTER === -->
+  <div class="section-slot" id="slot-footer">
+    <footer data-variant="a" class="footer-a visible-flex">
+      <p class="tagline">STREAMING RECEIVER</p>
+      <span class="model-badge">MRC-1900</span>
+    </footer>
+    <footer data-variant="b" class="footer-b">
+      <div class="footer-b__row">
+        <div class="footer-b__line"></div>
+        <p class="tagline">STREAMING RECEIVER</p>
+        <div class="footer-b__line"></div>
+      </div>
+      <span class="model-sub">MRC-1900</span>
+    </footer>
+    <footer data-variant="c" class="footer-c">
+      <p class="tagline">STREAMING RECEIVER</p>
+      <span class="model-engraved">MRC-1900</span>
+    </footer>
+    <footer data-variant="d" class="footer-d">
+      <p class="tagline">STREAMING RECEIVER</p>
+      <div class="model-led-badge">
+        <span class="model-led"></span>
+        MRC-1900
+      </div>
+    </footer>
+  </div>
+
+</div>
+
+<script>
+  // ── LCD content cloning ──
+  // Copy LCD cell markup from variant A into B, C, D
+  const lcdContent = document.querySelector('[data-variant="a"].lcd-base').innerHTML;
+  document.querySelector('[data-variant="b"].lcd-base').innerHTML = lcdContent;
+  document.querySelector('[data-variant="c"].lcd-base').innerHTML = lcdContent;
+  document.querySelector('[data-variant="d"].lcd-base').innerHTML = lcdContent;
+
+  // ── Variant swapping ──
+  function swap(section, variant) {
+    const slot = document.getElementById('slot-' + section);
+    slot.querySelectorAll('[data-variant]').forEach(el => {
+      el.classList.remove('visible', 'visible-flex', 'visible-grid');
+    });
+    const target = slot.querySelector(`[data-variant="${variant}"]`);
+    if (!target) return;
+
+    // Determine display type
+    const tag = target.tagName.toLowerCase();
+    if (section === 'header' || section === 'footer') {
+      target.classList.add('visible-flex');
+    } else if (section === 'preset' && variant === 'c') {
+      target.classList.add('visible');
+    } else if (section === 'fx' && (variant === 'c')) {
+      target.classList.add('visible-grid');
+    } else if (section === 'fx' && (variant === 'b')) {
+      target.classList.add('visible-grid');
+    } else if (section === 'fx' && (variant === 'd')) {
+      target.classList.add('visible-grid');
+    } else if (target.classList.contains('grid-3x2') || section === 'fx') {
+      target.classList.add('visible-grid');
+    } else {
+      target.classList.add('visible');
+    }
+  }
+
+  // ── Preset grid interactions ──
+  function activateCard(card) {
+    card.parentElement.querySelectorAll('.card').forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+  }
+
+  function activateFlat(btn) {
+    const grid = btn.closest('.grid-3x2') || btn.parentElement;
+    grid.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  // ── FX interactions ──
+  function activateFx(btn) {
+    btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  function activateSlider(btn, pos) {
+    btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('fx-track').setAttribute('data-pos', pos);
+  }
+</script>
+
+</body>
+</html>

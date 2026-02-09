@@ -622,7 +622,30 @@ function onGlobalKeyDown(event: KeyboardEvent) {
         @mousedown.left="startWindowDrag"
       />
       <header class="unit-header" data-tauri-drag-region>
-        <p class="brand">MARCONIO</p>
+        <div class="model-wrap">
+          <button type="button" class="brand-plate" @click="toggleModelMenu">
+            <span class="brand">MRC-1900</span>
+          </button>
+          <div v-if="modelMenuVisible" class="model-backdrop" @mousedown="closeModelMenu" />
+          <div v-if="modelMenuVisible" class="model-menu" @mousedown.stop>
+            <button
+              type="button"
+              class="model-menu-item"
+              :disabled="isLoading"
+              @click="loadPlayableMedia(); closeModelMenu()"
+            >
+              {{ isLoading ? "SYNCING..." : "REFRESH" }}
+            </button>
+            <button
+              type="button"
+              class="model-menu-item"
+              :disabled="!isPlaying"
+              @click="stopPlayback(); closeModelMenu()"
+            >
+              STOP
+            </button>
+          </div>
+        </div>
       </header>
 
       <LcdDisplay
@@ -649,29 +672,9 @@ function onGlobalKeyDown(event: KeyboardEvent) {
       />
 
       <footer class="unit-footer" data-tauri-drag-region>
+        <div class="footer-line" />
         <p class="tagline">STREAMING RECEIVER</p>
-        <div class="model-wrap">
-          <button type="button" class="model" @click="toggleModelMenu">MRC-1900</button>
-          <div v-if="modelMenuVisible" class="model-backdrop" @mousedown="closeModelMenu" />
-          <div v-if="modelMenuVisible" class="model-menu" @mousedown.stop>
-            <button
-              type="button"
-              class="model-menu-item"
-              :disabled="isLoading"
-              @click="loadPlayableMedia(); closeModelMenu()"
-            >
-              {{ isLoading ? "SYNCING..." : "REFRESH" }}
-            </button>
-            <button
-              type="button"
-              class="model-menu-item"
-              :disabled="!isPlaying"
-              @click="stopPlayback(); closeModelMenu()"
-            >
-              STOP
-            </button>
-          </div>
-        </div>
+        <div class="footer-line" />
       </footer>
 
       <PresetContextMenu

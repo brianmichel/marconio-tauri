@@ -170,10 +170,10 @@ function onContextMenu(event: MouseEvent) {
 }
 
 .preset-card.empty .slot-number {
-  color: #3a4248;
+  color: #555e66;
 }
 
 .preset-card.empty .slot-label {
-  color: #3a4248;
+  color: #555e66;
 }
 </style>
