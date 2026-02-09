@@ -2,7 +2,7 @@ import { mapLiveBroadcastsResponse, mapMixtapesResponse } from "./mappers";
 import type { LiveBroadcastsResponse, MixtapesResponse } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 
-const DEFAULT_BASE_URL = "https://nts.live/api/v2";
+const DEFAULT_BASE_URL = "https://www.nts.live/api/v2";
 
 export class NTSRequestError extends Error {
   readonly status: number;

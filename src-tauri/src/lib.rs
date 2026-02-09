@@ -1,10 +1,8 @@
-use serde_json::Value;
+mod audio_engine;
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+use crate::audio_engine::{AudioFxPreset, PlaybackManager};
+use serde_json::Value;
+use std::sync::Mutex;
 
 #[tauri::command]
 async fn nts_get(path: &str) -> Result<Value, String> {
@@ -36,24 +34,62 @@ async fn nts_get(path: &str) -> Result<Value, String> {
         return Err(message);
     }
 
-    let json = response
-        .json::<Value>()
-        .await
-        .map_err(|error| {
-            let message = error.to_string();
-            eprintln!("[nts_get] json error path={} err={}", path, message);
-            message
-        })?;
+    let json = response.json::<Value>().await.map_err(|error| {
+        let message = error.to_string();
+        eprintln!("[nts_get] json error path={} err={}", path, message);
+        message
+    })?;
 
     eprintln!("[nts_get] success path={}", path);
     Ok(json)
 }
 
+#[tauri::command]
+fn start_native_stream(
+    stream_url: String,
+    playback: tauri::State<'_, Mutex<PlaybackManager>>,
+) -> Result<(), String> {
+    let mut manager = playback
+        .lock()
+        .map_err(|_| "audio engine state lock poisoned".to_string())?;
+    manager.start_stream(stream_url);
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_native_stream(playback: tauri::State<'_, Mutex<PlaybackManager>>) -> Result<(), String> {
+    let mut manager = playback
+        .lock()
+        .map_err(|_| "audio engine state lock poisoned".to_string())?;
+    manager.stop_stream();
+    Ok(())
+}
+
+#[tauri::command]
+fn set_audio_fx_preset(
+    preset: String,
+    playback: tauri::State<'_, Mutex<PlaybackManager>>,
+) -> Result<(), String> {
+    let parsed = AudioFxPreset::from_str(&preset)
+        .ok_or_else(|| format!("unsupported audio fx preset: {preset}"))?;
+    let manager = playback
+        .lock()
+        .map_err(|_| "audio engine state lock poisoned".to_string())?;
+    manager.set_preset(parsed);
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(Mutex::new(PlaybackManager::default()))
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, nts_get])
+        .invoke_handler(tauri::generate_handler![
+            nts_get,
+            start_native_stream,
+            stop_native_stream,
+            set_audio_fx_preset
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -21,6 +21,7 @@
         "maxHeight": 300,
         "resizable": false,
         "maximizable": false,
+        "devtools": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true
       }

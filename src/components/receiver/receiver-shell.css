@@ -229,6 +229,12 @@
   z-index: 3;
 }
 
+.fx-segmented-row {
+  position: relative;
+  z-index: 4;
+  margin-top: 1px;
+}
+
 .tagline {
   margin: 0;
   color: #6b6560;
@@ -333,8 +339,4 @@
 .model-menu-item:disabled {
   opacity: 0.3;
   cursor: not-allowed;
-}
-
-audio {
-  display: none;
 }
