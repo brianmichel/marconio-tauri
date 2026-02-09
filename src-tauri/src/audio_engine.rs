@@ -45,7 +45,6 @@ impl AudioFxPreset {
             _ => Self::Clean,
         }
     }
-
 }
 
 struct Biquad {
@@ -161,6 +160,81 @@ impl Biquad {
     }
 }
 
+struct Warble {
+    sample_rate: f32,
+    channels: usize,
+    buffer: Vec<Vec<f32>>,
+    write_index: usize,
+    phase: f32,
+    wow_rate_hz: f32,
+    wow_depth_samples: f32,
+    flutter_rate_hz: f32,
+    flutter_depth_samples: f32,
+    base_delay_samples: f32,
+}
+
+impl Warble {
+    fn new(sample_rate: f32, channels: usize) -> Self {
+        let sr = sample_rate.max(8_000.0);
+        let ch = channels.max(1);
+        let max_delay_ms = 8.0;
+        let buffer_len = ((sr * max_delay_ms / 1000.0).ceil() as usize + 4).max(32);
+
+        Self {
+            sample_rate: sr,
+            channels: ch,
+            buffer: vec![vec![0.0; buffer_len]; ch],
+            write_index: 0,
+            phase: 0.0,
+            wow_rate_hz: 0.52,
+            wow_depth_samples: sr * (0.95 / 1000.0),
+            flutter_rate_hz: 6.7,
+            flutter_depth_samples: sr * (0.22 / 1000.0),
+            base_delay_samples: sr * (3.9 / 1000.0),
+        }
+    }
+
+    fn delay_samples(&self) -> f32 {
+        let wow = (2.0 * PI * self.wow_rate_hz * self.phase).sin();
+        let flutter = (2.0 * PI * self.flutter_rate_hz * self.phase + 0.7).sin();
+        let raw =
+            self.base_delay_samples + wow * self.wow_depth_samples + flutter * self.flutter_depth_samples;
+        let max_delay = (self.buffer[0].len().saturating_sub(3)) as f32;
+        raw.clamp(1.0, max_delay.max(1.0))
+    }
+
+    fn process(&mut self, channel: usize, input: f32) -> f32 {
+        if channel >= self.channels {
+            return input;
+        }
+
+        let len = self.buffer[channel].len();
+        if len < 3 {
+            return input;
+        }
+
+        let delay = self.delay_samples();
+        let len_f = len as f32;
+        let read_position = (self.write_index as f32 - delay).rem_euclid(len_f);
+        let index_a = read_position.floor() as usize;
+        let index_b = (index_a + 1) % len;
+        let fraction = read_position - index_a as f32;
+
+        let delayed = self.buffer[channel][index_a] * (1.0 - fraction)
+            + self.buffer[channel][index_b] * fraction;
+        self.buffer[channel][self.write_index] = input;
+        delayed
+    }
+
+    fn advance_frame(&mut self) {
+        self.write_index = (self.write_index + 1) % self.buffer[0].len();
+        self.phase += 1.0 / self.sample_rate;
+        if self.phase > 60.0 {
+            self.phase = 0.0;
+        }
+    }
+}
+
 struct FxProcessor {
     preset: AudioFxPreset,
     sample_rate: u32,
@@ -169,6 +243,8 @@ struct FxProcessor {
     low_pass: Option<Biquad>,
     mid_peak: Option<Biquad>,
     low_shelf: Option<Biquad>,
+    warble: Option<Warble>,
+    warble_mix: f32,
     distortion_drive: f32,
     saturation_mix: f32,
     compressor_threshold: f32,
@@ -186,6 +262,8 @@ impl FxProcessor {
             low_pass: None,
             mid_peak: None,
             low_shelf: None,
+            warble: None,
+            warble_mix: 0.0,
             distortion_drive: 1.0,
             saturation_mix: 0.0,
             compressor_threshold: 1.0,
@@ -212,6 +290,8 @@ impl FxProcessor {
         self.low_pass = None;
         self.mid_peak = None;
         self.low_shelf = None;
+        self.warble = None;
+        self.warble_mix = 0.0;
         self.distortion_drive = 1.0;
         self.saturation_mix = 0.0;
         self.compressor_threshold = 1.0;
@@ -226,6 +306,8 @@ impl FxProcessor {
                 self.high_pass = Some(Biquad::highpass(sr, 105.0, 0.75, channels));
                 self.low_pass = Some(Biquad::lowpass(sr, 6400.0, 0.82, channels));
                 self.mid_peak = Some(Biquad::peaking(sr, 2700.0, 1.35, -3.1, channels));
+                self.warble = Some(Warble::new(sr, channels));
+                self.warble_mix = 0.62;
                 self.distortion_drive = 1.42;
                 self.saturation_mix = 0.44;
                 self.compressor_threshold = 0.67;
@@ -261,29 +343,39 @@ impl FxProcessor {
             return;
         }
 
-        for (index, sample) in samples.iter_mut().enumerate() {
-            let channel = index % self.channels;
-            let mut value = *sample;
+        for frame in samples.chunks_mut(self.channels) {
+            for (channel, sample) in frame.iter_mut().enumerate() {
+                let mut value = *sample;
 
-            if let Some(filter) = self.high_pass.as_mut() {
-                value = filter.process(channel, value);
-            }
-            if let Some(filter) = self.low_shelf.as_mut() {
-                value = filter.process(channel, value);
-            }
-            if let Some(filter) = self.mid_peak.as_mut() {
-                value = filter.process(channel, value);
-            }
-            if let Some(filter) = self.low_pass.as_mut() {
-                value = filter.process(channel, value);
+                if let Some(filter) = self.high_pass.as_mut() {
+                    value = filter.process(channel, value);
+                }
+                if let Some(filter) = self.low_shelf.as_mut() {
+                    value = filter.process(channel, value);
+                }
+                if let Some(filter) = self.mid_peak.as_mut() {
+                    value = filter.process(channel, value);
+                }
+                if let Some(filter) = self.low_pass.as_mut() {
+                    value = filter.process(channel, value);
+                }
+                if let Some(warble) = self.warble.as_mut() {
+                    let warped = warble.process(channel, value);
+                    value = value + (warped - value) * self.warble_mix;
+                }
+
+                let drive = self.distortion_drive.max(0.001);
+                let saturated = (value * drive).tanh() / drive;
+                value = value + (saturated - value) * self.saturation_mix;
+                value = self.compress(value);
+                value *= self.makeup_gain;
+
+                *sample = value.clamp(-1.0, 1.0);
             }
 
-            let saturated = (value * self.distortion_drive).tanh() / self.distortion_drive;
-            value = value + (saturated - value) * self.saturation_mix;
-            value = self.compress(value);
-            value *= self.makeup_gain;
-
-            *sample = value.clamp(-1.0, 1.0);
+            if let Some(warble) = self.warble.as_mut() {
+                warble.advance_frame();
+            }
         }
     }
 

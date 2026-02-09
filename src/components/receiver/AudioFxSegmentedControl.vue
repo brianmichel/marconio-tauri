@@ -64,11 +64,19 @@ defineEmits<{
   color: #d6dbe1;
 }
 
-.fx-segmented__button--active {
-  background: rgba(158, 125, 95, 0.24);
+.fx-segmented__button.fx-segmented__button--active,
+.fx-segmented__button.fx-segmented__button--active:hover {
+  background:
+    linear-gradient(180deg, var(--theme-accent-soft) 0%, rgba(10, 12, 16, 0.6) 100%),
+    rgba(28, 33, 39, 0.82);
   border-color: var(--theme-accent-border);
-  color: #e9d3bb;
-  text-shadow: 0 0 6px rgba(233, 211, 187, 0.2);
+  color: var(--theme-slot-label-active);
+  text-shadow: 0 0 7px var(--theme-accent-glow);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 0 10px var(--theme-accent-soft),
+    0 0 0 1px var(--theme-accent-outline),
+    0 0 10px var(--theme-accent-glow);
 }
 
 .fx-segmented__button:focus-visible {
