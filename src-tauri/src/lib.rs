@@ -1,8 +1,9 @@
 mod audio_engine;
 
-use crate::audio_engine::{AudioFxPreset, PlaybackManager};
+use crate::audio_engine::{AudioFxPreset, NowPlayingMetadata, PlaybackManager};
 use serde_json::Value;
 use std::sync::Mutex;
+use tauri::Manager;
 
 #[tauri::command]
 async fn nts_get(path: &str) -> Result<Value, String> {
@@ -47,12 +48,13 @@ async fn nts_get(path: &str) -> Result<Value, String> {
 #[tauri::command]
 fn start_native_stream(
     stream_url: String,
+    now_playing: Option<NowPlayingMetadata>,
     playback: tauri::State<'_, Mutex<PlaybackManager>>,
 ) -> Result<(), String> {
     let mut manager = playback
         .lock()
         .map_err(|_| "audio engine state lock poisoned".to_string())?;
-    manager.start_stream(stream_url);
+    manager.start_stream(stream_url, now_playing);
     Ok(())
 }
 
@@ -83,6 +85,14 @@ fn set_audio_fx_preset(
 pub fn run() {
     tauri::Builder::default()
         .manage(Mutex::new(PlaybackManager::default()))
+        .setup(|app| {
+            let state = app.state::<Mutex<PlaybackManager>>();
+            match state.lock() {
+                Ok(mut manager) => manager.initialize_media_controls(app.handle().clone()),
+                Err(_) => eprintln!("[audio] unable to initialize media controls: state lock poisoned"),
+            }
+            Ok(())
+        })
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             nts_get,

@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import {
   createNTSClient,
   playableFromChannel,
@@ -24,6 +25,10 @@ const LCD_THEMES = ["amber", "blue", "green", "purpleRed"] as const;
 type UserSlot = (typeof USER_SLOTS)[number];
 type PresetAssignments = Record<UserSlot, string | null>;
 type LcdTheme = (typeof LCD_THEMES)[number];
+type NativeMediaControlAction = "play" | "pause" | "stop" | "toggle";
+type NativeMediaControlPayload = {
+  action: NativeMediaControlAction;
+};
 
 const channels = ref<MediaPlayable[]>([]);
 const mixtapes = ref<MediaPlayable[]>([]);
@@ -80,6 +85,19 @@ function canUseTauriInvoke() {
   );
 }
 
+function nowPlayingFromPlayable(playable: MediaPlayable) {
+  const album = playable.source.kind === "channel"
+    ? `NTS ${playable.source.value.channelName}`
+    : "NTS Mixtape";
+
+  return {
+    title: playable.title,
+    artist: playable.subtitle ?? "NTS Radio",
+    album,
+    artworkUrl: playable.artworkUrl,
+  };
+}
+
 function cycleLcdTheme() {
   const currentIndex = LCD_THEMES.indexOf(lcdTheme.value);
   lcdTheme.value = LCD_THEMES[(currentIndex + 1) % LCD_THEMES.length];
@@ -109,6 +127,7 @@ const contextMenu = ref<{
 const presetButtonRefs = ref<Record<number, HTMLButtonElement | null>>({});
 
 let controller: AbortController | null = null;
+let unlistenNativeMediaControl: (() => void) | null = null;
 
 function readAssignments(): PresetAssignments {
   const defaults: PresetAssignments = {
@@ -342,7 +361,10 @@ async function startPlayback(playable: MediaPlayable, slot: number) {
   }
 
   try {
-    await invoke("start_native_stream", { streamUrl: playable.streamUrl });
+    await invoke("start_native_stream", {
+      streamUrl: playable.streamUrl,
+      nowPlaying: nowPlayingFromPlayable(playable),
+    });
     isPlaying.value = true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -363,6 +385,34 @@ async function stopPlayback() {
     console.warn("[audio] Unable to stop native playback", error);
   } finally {
     isPlaying.value = false;
+  }
+}
+
+async function handleNativeMediaControl(action: NativeMediaControlAction) {
+  if (action === "pause" || action === "stop") {
+    if (isPlaying.value) {
+      await stopPlayback();
+    }
+    return;
+  }
+
+  if (!currentPlayable.value || activeSlot.value === null) {
+    return;
+  }
+
+  if (action === "play") {
+    if (!isPlaying.value) {
+      await startPlayback(currentPlayable.value, activeSlot.value);
+    }
+    return;
+  }
+
+  if (action === "toggle") {
+    if (isPlaying.value) {
+      await stopPlayback();
+      return;
+    }
+    await startPlayback(currentPlayable.value, activeSlot.value);
   }
 }
 
@@ -533,6 +583,17 @@ onMounted(async () => {
     } catch (error) {
       console.warn("[audio] Unable to initialize native preset", error);
     }
+
+    try {
+      unlistenNativeMediaControl = await listen<NativeMediaControlPayload>(
+        "native-media-control",
+        (event) => {
+          void handleNativeMediaControl(event.payload.action);
+        },
+      );
+    } catch (error) {
+      console.warn("[audio] Unable to listen for native media controls", error);
+    }
   }
 
   loadPlayableMedia();
@@ -548,6 +609,10 @@ onBeforeUnmount(() => {
     void invoke("stop_native_stream").catch(() => {
       // Ignore cleanup errors.
     });
+  }
+  if (unlistenNativeMediaControl) {
+    unlistenNativeMediaControl();
+    unlistenNativeMediaControl = null;
   }
   if (lcdThemeAnimationTimer) {
     clearTimeout(lcdThemeAnimationTimer);

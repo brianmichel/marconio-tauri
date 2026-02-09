@@ -1,6 +1,7 @@
 use minimp3::{Decoder, Error as Mp3Error};
 use rodio::buffer::SamplesBuffer;
 use rodio::{OutputStream, Sink};
+use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 use std::io::BufReader;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -8,6 +9,25 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
+#[cfg(target_os = "macos")]
+use souvlaki::{MediaControlEvent, MediaControls, MediaMetadata, MediaPlayback, PlatformConfig};
+#[cfg(target_os = "macos")]
+use tauri::Emitter;
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NowPlayingMetadata {
+    pub title: String,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub artwork_url: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeMediaControlPayload {
+    action: String,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AudioFxPreset {
@@ -400,6 +420,9 @@ struct PlaybackWorker {
 pub struct PlaybackManager {
     worker: Option<PlaybackWorker>,
     preset: Arc<AtomicU8>,
+    now_playing: Option<NowPlayingMetadata>,
+    #[cfg(target_os = "macos")]
+    media_controls: Option<MediaControls>,
 }
 
 impl Default for PlaybackManager {
@@ -407,17 +430,64 @@ impl Default for PlaybackManager {
         Self {
             worker: None,
             preset: Arc::new(AtomicU8::new(AudioFxPreset::Clean.as_u8())),
+            now_playing: None,
+            #[cfg(target_os = "macos")]
+            media_controls: None,
         }
     }
 }
 
 impl PlaybackManager {
+    pub fn initialize_media_controls(&mut self, app: tauri::AppHandle) {
+        #[cfg(target_os = "macos")]
+        {
+            let mut controls = match MediaControls::new(PlatformConfig {
+                display_name: "Marconio",
+                dbus_name: "me.foureyes.marconio",
+                hwnd: None,
+            }) {
+                Ok(controls) => controls,
+                Err(error) => {
+                    eprintln!("[audio] media controls init failed: {error}");
+                    return;
+                }
+            };
+
+            let event_app = app.clone();
+            if let Err(error) = controls.attach(move |event| {
+                if let Some(action) = map_media_control_action(event) {
+                    let payload = NativeMediaControlPayload {
+                        action: action.to_string(),
+                    };
+                    if let Err(emit_error) = event_app.emit("native-media-control", payload) {
+                        eprintln!("[audio] media control emit failed: {emit_error}");
+                    }
+                }
+            }) {
+                eprintln!("[audio] media controls attach failed: {error}");
+                return;
+            }
+
+            if let Err(error) = controls.set_playback(MediaPlayback::Stopped) {
+                eprintln!("[audio] media controls initial playback failed: {error}");
+            }
+
+            self.media_controls = Some(controls);
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = app;
+    }
+
     pub fn set_preset(&self, preset: AudioFxPreset) {
         self.preset.store(preset.as_u8(), Ordering::Relaxed);
     }
 
-    pub fn start_stream(&mut self, stream_url: String) {
+    pub fn start_stream(&mut self, stream_url: String, now_playing: Option<NowPlayingMetadata>) {
         self.stop_stream();
+        if let Some(metadata) = now_playing {
+            self.now_playing = Some(metadata);
+            self.sync_media_metadata();
+        }
 
         let preset = Arc::clone(&self.preset);
         let (stop_tx, stop_rx) = mpsc::channel::<()>();
@@ -431,6 +501,7 @@ impl PlaybackManager {
             stop_tx,
             join_handle,
         });
+        self.sync_media_playback_state(true);
     }
 
     pub fn stop_stream(&mut self) {
@@ -440,6 +511,49 @@ impl PlaybackManager {
                 let _ = worker.join_handle.join();
             });
         }
+        self.sync_media_playback_state(false);
+    }
+
+    fn sync_media_metadata(&mut self) {
+        #[cfg(target_os = "macos")]
+        if let Some(controls) = self.media_controls.as_mut() {
+            let metadata = self.now_playing.as_ref();
+            let payload = MediaMetadata {
+                title: metadata.map(|item| item.title.as_str()),
+                artist: metadata.and_then(|item| item.artist.as_deref()),
+                album: metadata.and_then(|item| item.album.as_deref()),
+                cover_url: metadata.and_then(|item| item.artwork_url.as_deref()),
+                duration: None,
+            };
+            if let Err(error) = controls.set_metadata(payload) {
+                eprintln!("[audio] media controls metadata failed: {error}");
+            }
+        }
+    }
+
+    fn sync_media_playback_state(&mut self, is_playing: bool) {
+        #[cfg(target_os = "macos")]
+        if let Some(controls) = self.media_controls.as_mut() {
+            let playback = if is_playing {
+                MediaPlayback::Playing { progress: None }
+            } else {
+                MediaPlayback::Paused { progress: None }
+            };
+            if let Err(error) = controls.set_playback(playback) {
+                eprintln!("[audio] media controls playback failed: {error}");
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn map_media_control_action(event: MediaControlEvent) -> Option<&'static str> {
+    match event {
+        MediaControlEvent::Play => Some("play"),
+        MediaControlEvent::Pause => Some("pause"),
+        MediaControlEvent::Toggle => Some("toggle"),
+        MediaControlEvent::Stop => Some("stop"),
+        _ => None,
     }
 }
 
