@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FX Selector Explorations — Marconio</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #1a1c1e;
+    color: #e0e0e0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+    padding: 48px 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 56px;
+  }
+
+  h1 {
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #888;
+    text-align: center;
+  }
+
+  .exploration {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    width: 100%;
+    max-width: 520px;
+  }
+
+  .exploration__label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #6a6e72;
+    text-align: center;
+  }
+
+  .exploration__desc {
+    font-size: 11px;
+    font-weight: 600;
+    color: #4a4e52;
+    text-align: center;
+    line-height: 1.5;
+    max-width: 400px;
+  }
+
+  /* ── Shared container to emulate the Marconio unit chrome ── */
+  .unit-strip {
+    width: 100%;
+    max-width: 380px;
+    border: 1px solid #4a4d50;
+    background:
+      linear-gradient(168deg, rgba(255,255,255,0.07) 0%, transparent 22%),
+      linear-gradient(180deg, #2a2e32 0%, #1a1d21 38%, #111417 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.15),
+      inset 0 -1px 0 rgba(0,0,0,0.6),
+      inset 2px 0 6px rgba(0,0,0,0.2),
+      inset -2px 0 6px rgba(0,0,0,0.2),
+      inset 0 -12px 28px rgba(0,0,0,0.4);
+    padding: 10px 10px;
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Scanline overlay */
+  .unit-strip::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,0.012) 0, rgba(255,255,255,0.012) 1px,
+      transparent 1px, transparent 3px
+    );
+    z-index: 1;
+  }
+
+  /* ── Accent color (blue theme) ── */
+  :root {
+    --accent-border: #4a75b4;
+    --accent-soft: rgba(77,130,194,0.12);
+    --accent-outline: rgba(108,165,233,0.35);
+    --accent-glow: rgba(108,165,233,0.2);
+    --accent-text: #7da7d8;
+    --accent-bright: #8fbae8;
+    --accent-led: #6ab4ff;
+    --accent-led-glow: rgba(106,180,255,0.7);
+  }
+
+
+  /* ═══════════════════════════════════════════════════
+     A. CURRENT — Segmented control (existing design)
+     ═══════════════════════════════════════════════════ */
+  .fx-current {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 3px;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 5px;
+    padding: 3px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%),
+      rgba(5,7,10,0.55);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      inset 0 -1px 0 rgba(0,0,0,0.45);
+    position: relative;
+    z-index: 2;
+  }
+
+  .fx-current button {
+    -webkit-appearance: none;
+    appearance: none;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: rgba(34,39,46,0.65);
+    color: #9fa6ae;
+    font-family: inherit;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    padding: 5px 4px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+  }
+
+  .fx-current button:hover {
+    background: rgba(52,61,72,0.82);
+    color: #d6dbe1;
+  }
+
+  .fx-current button.active {
+    background:
+      linear-gradient(180deg, var(--accent-soft) 0%, rgba(10,12,16,0.6) 100%),
+      rgba(28,33,39,0.82);
+    border-color: var(--accent-border);
+    color: var(--accent-text);
+    text-shadow: 0 0 7px var(--accent-glow);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.16),
+      inset 0 0 10px var(--accent-soft),
+      0 0 0 1px var(--accent-outline),
+      0 0 10px var(--accent-glow);
+  }
+
+
+  /* ═══════════════════════════════════════════════════
+     B. CONCEPT: LED-PIP PUSH BUTTONS
+     Pioneer/Alpine-style raised buttons with LED pips
+     ═══════════════════════════════════════════════════ */
+  .fx-led-pips {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+    padding: 2px 0;
+    position: relative;
+    z-index: 2;
+  }
+
+  .fx-led-pips button {
+    -webkit-appearance: none;
+    appearance: none;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-bottom-color: rgba(0,0,0,0.3);
+    border-radius: 3px;
+    background:
+      linear-gradient(180deg,
+        rgba(60,65,72,0.9) 0%,
+        rgba(36,40,46,0.95) 40%,
+        rgba(30,34,40,0.95) 100%
+      );
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.1),
+      0 2px 4px rgba(0,0,0,0.5),
+      0 1px 1px rgba(0,0,0,0.3);
+    color: #6e747a;
+    font-family: inherit;
+    font-size: 7.5px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    padding: 8px 4px 6px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 120ms ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    position: relative;
+  }
+
+  .fx-led-pips button::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #1a1c1e;
+    border: 1px solid rgba(255,255,255,0.05);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+    transition: all 180ms ease;
+  }
+
+  .fx-led-pips button:hover {
+    background:
+      linear-gradient(180deg,
+        rgba(70,76,84,0.95) 0%,
+        rgba(42,47,54,0.95) 40%,
+        rgba(36,40,46,0.95) 100%
+      );
+    color: #a0a6ac;
+  }
+
+  .fx-led-pips button:active {
+    box-shadow:
+      inset 0 1px 3px rgba(0,0,0,0.4),
+      0 0 1px rgba(0,0,0,0.2);
+    transform: translateY(1px);
+  }
+
+  .fx-led-pips button.active {
+    color: #c8d0d8;
+    border-color: rgba(255,255,255,0.12);
+  }
+
+  .fx-led-pips button.active::before {
+    background: var(--accent-led);
+    border-color: transparent;
+    box-shadow:
+      0 0 4px var(--accent-led-glow),
+      0 0 10px var(--accent-led-glow),
+      inset 0 -1px 1px rgba(0,0,0,0.2);
+  }
+
+
+  /* ═══════════════════════════════════════════════════
+     C. CONCEPT: ROCKER BAR SELECTOR
+     Single horizontal bar with sliding illuminated
+     indicator — like a cassette deck mode switch
+     ═══════════════════════════════════════════════════ */
+  .fx-rocker {
+    position: relative;
+    z-index: 2;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 4px;
+    background:
+      linear-gradient(180deg, rgba(10,12,16,0.8) 0%, rgba(18,21,25,0.9) 100%);
+    box-shadow:
+      inset 0 2px 6px rgba(0,0,0,0.5),
+      inset 0 -1px 0 rgba(255,255,255,0.04),
+      0 1px 0 rgba(255,255,255,0.04);
+    padding: 3px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    overflow: hidden;
+  }
+
+  .fx-rocker__track {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc(25% - 3px);
+    border-radius: 3px;
+    background:
+      linear-gradient(180deg,
+        rgba(77,130,194,0.18) 0%,
+        rgba(40,70,120,0.12) 50%,
+        rgba(20,40,70,0.08) 100%
+      );
+    border: 1px solid var(--accent-border);
+    box-shadow:
+      0 0 12px var(--accent-glow),
+      inset 0 1px 0 rgba(255,255,255,0.12),
+      inset 0 0 8px rgba(77,130,194,0.1);
+    transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .fx-rocker__track[data-pos="0"] { transform: translateX(0); }
+  .fx-rocker__track[data-pos="1"] { transform: translateX(calc(100% + 3px)); }
+  .fx-rocker__track[data-pos="2"] { transform: translateX(calc(200% + 6px)); }
+  .fx-rocker__track[data-pos="3"] { transform: translateX(calc(300% + 9px)); }
+
+  .fx-rocker button {
+    -webkit-appearance: none;
+    appearance: none;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: #5a6068;
+    font-family: inherit;
+    font-size: 7.5px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    padding: 6px 4px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color 200ms ease;
+    position: relative;
+    z-index: 2;
+  }
+
+  .fx-rocker button:hover {
+    color: #8a9098;
+  }
+
+  .fx-rocker button.active {
+    color: var(--accent-bright);
+    text-shadow: 0 0 8px var(--accent-glow);
+  }
+
+
+  /* ═══════════════════════════════════════════════════
+     D. CONCEPT: RECESSED PANEL BUTTONS + LED STRIP
+     JVC/Sony-style with a thin LED line above each
+     button that illuminates when active
+     ═══════════════════════════════════════════════════ */
+  .fx-recessed {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .fx-recessed button {
+    -webkit-appearance: none;
+    appearance: none;
+    border: 1px solid rgba(0,0,0,0.4);
+    border-top-color: rgba(0,0,0,0.5);
+    border-radius: 2px;
+    background:
+      linear-gradient(180deg,
+        rgba(16,18,22,0.95) 0%,
+        rgba(24,27,32,0.95) 50%,
+        rgba(20,22,26,0.95) 100%
+      );
+    box-shadow:
+      inset 0 1px 4px rgba(0,0,0,0.4),
+      inset 0 -1px 0 rgba(255,255,255,0.03),
+      0 1px 0 rgba(255,255,255,0.05);
+    color: #555a60;
+    font-family: inherit;
+    font-size: 7px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    padding: 7px 4px 6px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 140ms ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* LED bar at top of button */
+  .fx-recessed button::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 20%;
+    right: 20%;
+    height: 2px;
+    border-radius: 0 0 2px 2px;
+    background: rgba(40,44,50,0.8);
+    transition: all 180ms ease;
+  }
+
+  .fx-recessed button:hover {
+    color: #8a8f96;
+    background:
+      linear-gradient(180deg,
+        rgba(22,25,30,0.95) 0%,
+        rgba(30,34,40,0.95) 50%,
+        rgba(26,29,34,0.95) 100%
+      );
+  }
+
+  .fx-recessed button:active {
+    box-shadow:
+      inset 0 2px 6px rgba(0,0,0,0.5),
+      inset 0 -1px 0 rgba(255,255,255,0.02);
+  }
+
+  .fx-recessed button.active {
+    color: #b8c4d2;
+    border-color: rgba(77,130,194,0.2);
+    background:
+      linear-gradient(180deg,
+        rgba(20,24,30,0.95) 0%,
+        rgba(26,30,38,0.95) 50%,
+        rgba(22,26,32,0.95) 100%
+      );
+    box-shadow:
+      inset 0 1px 4px rgba(0,0,0,0.3),
+      inset 0 0 12px rgba(77,130,194,0.04);
+  }
+
+  .fx-recessed button.active::before {
+    background: var(--accent-led);
+    left: 15%;
+    right: 15%;
+    box-shadow:
+      0 0 4px var(--accent-led-glow),
+      0 1px 6px var(--accent-led-glow),
+      0 2px 12px rgba(106,180,255,0.3);
+  }
+
+
+  /* ═══════════════════════════════════════════════════
+     E. CONCEPT: KNURLED ROTARY SELECTOR
+     Single rotary-style control — click to cycle
+     through options, current selection shown in
+     a small readout
+     ═══════════════════════════════════════════════════ */
+  .fx-rotary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: relative;
+    z-index: 2;
+    padding: 4px 8px;
+  }
+
+  .fx-rotary__labels {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+  }
+
+  .fx-rotary__label-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 1px 0;
+    transition: all 120ms ease;
+  }
+
+  .fx-rotary__label-row:hover .fx-rotary__text {
+    color: #a0a6ac;
+  }
+
+  .fx-rotary__pip {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: #2a2e34;
+    border: 1px solid rgba(255,255,255,0.06);
+    flex-shrink: 0;
+    transition: all 180ms ease;
+  }
+
+  .fx-rotary__text {
+    font-size: 7px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #555a60;
+    transition: color 140ms ease;
+  }
+
+  .fx-rotary__label-row.active .fx-rotary__pip {
+    background: var(--accent-led);
+    box-shadow: 0 0 4px var(--accent-led-glow), 0 0 8px var(--accent-led-glow);
+    border-color: transparent;
+  }
+
+  .fx-rotary__label-row.active .fx-rotary__text {
+    color: var(--accent-bright);
+    text-shadow: 0 0 6px var(--accent-glow);
+  }
+
+  .fx-rotary__knob-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .fx-rotary__knob-label {
+    font-size: 6px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #4a4e54;
+  }
+
+  .fx-rotary__knob {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 35%, rgba(80,85,92,1) 0%, rgba(40,44,50,1) 60%, rgba(28,32,38,1) 100%);
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow:
+      0 2px 8px rgba(0,0,0,0.6),
+      0 1px 2px rgba(0,0,0,0.4),
+      inset 0 1px 0 rgba(255,255,255,0.15),
+      inset 0 -2px 4px rgba(0,0,0,0.3);
+    cursor: pointer;
+    position: relative;
+    transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Knurled edge texture */
+  .fx-rotary__knob::before {
+    content: "";
+    position: absolute;
+    inset: 2px;
+    border-radius: 50%;
+    background:
+      repeating-conic-gradient(
+        rgba(255,255,255,0.06) 0deg, transparent 4deg, transparent 8deg,
+        rgba(255,255,255,0.06) 8deg, transparent 12deg, transparent 16deg
+      );
+  }
+
+  /* Indicator notch */
+  .fx-rotary__knob::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 8px;
+    border-radius: 1px;
+    background: #c0c4c8;
+    box-shadow: 0 0 3px rgba(255,255,255,0.2);
+    transition: inherit;
+  }
+
+  .fx-rotary__knob[data-pos="0"] { transform: rotate(-60deg); }
+  .fx-rotary__knob[data-pos="1"] { transform: rotate(-20deg); }
+  .fx-rotary__knob[data-pos="2"] { transform: rotate(20deg); }
+  .fx-rotary__knob[data-pos="3"] { transform: rotate(60deg); }
+
+  .fx-rotary__knob:active {
+    box-shadow:
+      0 1px 4px rgba(0,0,0,0.5),
+      0 0 1px rgba(0,0,0,0.3),
+      inset 0 1px 0 rgba(255,255,255,0.12),
+      inset 0 -1px 3px rgba(0,0,0,0.3);
+  }
+
+  /* ── Dividers between sections ── */
+  .divider {
+    width: 100%;
+    max-width: 380px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 30%, rgba(255,255,255,0.06) 70%, transparent 100%);
+  }
+</style>
+</head>
+<body>
+
+<h1>Marconio — FX Selector Explorations</h1>
+
+<!-- A. Current -->
+<div class="exploration">
+  <span class="exploration__label">A — Current Design</span>
+  <span class="exploration__desc">Flat segmented control with glow highlight on active item</span>
+  <div class="unit-strip">
+    <div class="fx-current" data-group="a">
+      <button class="active" onclick="selectInGroup(this)">Clean</button>
+      <button onclick="selectInGroup(this)">Mag</button>
+      <button onclick="selectInGroup(this)">Bass+</button>
+      <button onclick="selectInGroup(this)">Radio</button>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- B. LED Pip Push Buttons -->
+<div class="exploration">
+  <span class="exploration__label">B — LED Pip Push Buttons</span>
+  <span class="exploration__desc">Pioneer/Alpine-style raised 3D buttons with a small LED indicator that lights up when active. Tactile, chunky feel.</span>
+  <div class="unit-strip">
+    <div class="fx-led-pips" data-group="b">
+      <button class="active" onclick="selectInGroup(this)"><span></span>Clean</button>
+      <button onclick="selectInGroup(this)"><span></span>Mag</button>
+      <button onclick="selectInGroup(this)"><span></span>Bass+</button>
+      <button onclick="selectInGroup(this)"><span></span>Radio</button>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- C. Sliding Rocker -->
+<div class="exploration">
+  <span class="exploration__label">C — Sliding Indicator Bar</span>
+  <span class="exploration__desc">Recessed channel with a sliding illuminated highlight that glides to the selected position. Cassette deck mode-switch feel.</span>
+  <div class="unit-strip">
+    <div class="fx-rocker" id="rocker-group">
+      <div class="fx-rocker__track" data-pos="0" id="rocker-track"></div>
+      <button class="active" onclick="selectRocker(this, 0)">Clean</button>
+      <button onclick="selectRocker(this, 1)">Mag</button>
+      <button onclick="selectRocker(this, 2)">Bass+</button>
+      <button onclick="selectRocker(this, 3)">Radio</button>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- D. Recessed + LED Strip -->
+<div class="exploration">
+  <span class="exploration__label">D — Recessed Buttons + LED Bar</span>
+  <span class="exploration__desc">JVC/Sony-style sunken buttons with a thin LED strip along the top edge that glows when active. Feels like pressing into a panel.</span>
+  <div class="unit-strip">
+    <div class="fx-recessed" data-group="d">
+      <button class="active" onclick="selectInGroup(this)">Clean</button>
+      <button onclick="selectInGroup(this)">Mag</button>
+      <button onclick="selectInGroup(this)">Bass+</button>
+      <button onclick="selectInGroup(this)">Radio</button>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- E. Rotary Knob -->
+<div class="exploration">
+  <span class="exploration__label">E — Rotary Knob Selector</span>
+  <span class="exploration__desc">Kenwood/Clarion-style knurled knob with detent positions. Click the knob or labels to select. More analog/physical character.</span>
+  <div class="unit-strip">
+    <div class="fx-rotary" id="rotary-group">
+      <div class="fx-rotary__labels">
+        <div class="fx-rotary__label-row active" onclick="selectRotary(0)">
+          <div class="fx-rotary__pip"></div>
+          <span class="fx-rotary__text">Clean</span>
+        </div>
+        <div class="fx-rotary__label-row" onclick="selectRotary(1)">
+          <div class="fx-rotary__pip"></div>
+          <span class="fx-rotary__text">Mag</span>
+        </div>
+        <div class="fx-rotary__label-row" onclick="selectRotary(2)">
+          <div class="fx-rotary__pip"></div>
+          <span class="fx-rotary__text">Bass+</span>
+        </div>
+        <div class="fx-rotary__label-row" onclick="selectRotary(3)">
+          <div class="fx-rotary__pip"></div>
+          <span class="fx-rotary__text">Radio</span>
+        </div>
+      </div>
+      <div class="fx-rotary__knob-area">
+        <span class="fx-rotary__knob-label">FX Mode</span>
+        <div class="fx-rotary__knob" data-pos="0" id="rotary-knob" onclick="cycleRotary()"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* Generic: toggle active within parent group */
+  function selectInGroup(btn) {
+    const parent = btn.parentElement;
+    parent.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  /* Rocker: slide track + toggle active */
+  function selectRocker(btn, pos) {
+    const group = document.getElementById('rocker-group');
+    group.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('rocker-track').setAttribute('data-pos', pos);
+  }
+
+  /* Rotary: update knob angle + label highlights */
+  let rotaryPos = 0;
+  function selectRotary(pos) {
+    rotaryPos = pos;
+    const rows = document.querySelectorAll('#rotary-group .fx-rotary__label-row');
+    rows.forEach((r, i) => r.classList.toggle('active', i === pos));
+    document.getElementById('rotary-knob').setAttribute('data-pos', pos);
+  }
+
+  function cycleRotary() {
+    rotaryPos = (rotaryPos + 1) % 4;
+    selectRotary(rotaryPos);
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Preset Grid Explorations — Marconio</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #1a1c1e;
+    color: #e0e0e0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+    padding: 48px 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 56px;
+  }
+
+  h1 {
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #888;
+    text-align: center;
+  }
+
+  .exploration {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    width: 100%;
+    max-width: 520px;
+  }
+
+  .exploration__label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #6a6e72;
+  }
+
+  .exploration__desc {
+    font-size: 11px;
+    font-weight: 600;
+    color: #4a4e52;
+    text-align: center;
+    line-height: 1.5;
+    max-width: 420px;
+  }
+
+  /* ── Shared unit chrome ── */
+  .unit-strip {
+    width: 100%;
+    max-width: 380px;
+    border: 1px solid #4a4d50;
+    background:
+      linear-gradient(168deg, rgba(255,255,255,0.07) 0%, transparent 22%),
+      linear-gradient(180deg, #2a2e32 0%, #1a1d21 38%, #111417 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.15),
+      inset 0 -1px 0 rgba(0,0,0,0.6),
+      inset 2px 0 6px rgba(0,0,0,0.2),
+      inset -2px 0 6px rgba(0,0,0,0.2),
+      inset 0 -12px 28px rgba(0,0,0,0.4);
+    padding: 10px;
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .unit-strip::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,0.012) 0, rgba(255,255,255,0.012) 1px,
+      transparent 1px, transparent 3px
+    );
+    z-index: 1;
+  }
+
+  :root {
+    --accent-border: #4a75b4;
+    --accent-soft: rgba(77,130,194,0.12);
+    --accent-outline: rgba(108,165,233,0.35);
+    --accent-glow: rgba(108,165,233,0.2);
+    --accent-text: #7da7d8;
+    --accent-bright: #8fbae8;
+    --accent-led: #6ab4ff;
+    --accent-led-glow: rgba(106,180,255,0.7);
+    --slot-active: #8fb5e1;
+    --slot-label-active: #7da7d8;
+    --display-font: 'Inter', -apple-system, sans-serif;
+  }
+
+  .divider {
+    width: 100%;
+    max-width: 380px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 30%, rgba(255,255,255,0.06) 70%, transparent 100%);
+  }
+
+  /* Shared grid helper */
+  .grid-3x2 {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    position: relative;
+    z-index: 2;
+    /* simulate the flex:1 with a fixed height for the mockup */
+    height: 140px;
+  }
+
+
+  /* ═══════════════════════════════════════════════════
+     A. CURRENT DESIGN — Recessed card + raised button
+     ═══════════════════════════════════════════════════ */
+  .preset-a .card {
+    border-radius: 6px;
+    border: 1px solid #0a0b0d;
+    background: linear-gradient(180deg, #080a0c 0%, #0d0f11 100%);
+    box-shadow:
+      inset 0 2px 4px rgba(0,0,0,0.6),
+      inset 0 -1px 2px rgba(255,255,255,0.03),
+      0 1px 0 rgba(255,255,255,0.04);
+    padding: 3px;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 280ms ease, box-shadow 280ms ease;
+  }
+
+  .preset-a .card.active {
+    border-color: var(--accent-border);
+    box-shadow:
+      inset 0 2px 4px rgba(0,0,0,0.5),
+      inset 0 0 8px var(--accent-soft),
+      0 0 0 1px var(--accent-outline),
+      0 0 12px var(--accent-glow);
+  }
+
+  .preset-a .btn {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; flex: 1; min-height: 0;
+    border: none; border-radius: 4px;
+    color: #656e76;
+    background: linear-gradient(180deg, #2c3035 0%, #222629 30%, #1a1d20 70%, #141618 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.1),
+      inset 1px 0 0 rgba(255,255,255,0.04),
+      inset -1px 0 0 rgba(255,255,255,0.04),
+      inset 0 -2px 3px rgba(0,0,0,0.25),
+      0 2px 3px rgba(0,0,0,0.5),
+      0 4px 8px rgba(0,0,0,0.25);
+    cursor: pointer;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2px; padding: 4px 4px 6px;
+    transition: box-shadow 60ms ease, transform 60ms ease, background 60ms ease;
+  }
+
+  .preset-a .btn:hover {
+    background: linear-gradient(180deg, #333840 0%, #282c30 30%, #1e2124 70%, #181a1d 100%);
+  }
+
+  .preset-a .btn:active {
+    transform: translateY(1.5px);
+    background: linear-gradient(180deg, #1e2124 0%, #1a1d20 40%, #161819 100%);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.4), inset 0 0 6px rgba(0,0,0,0.15), 0 0 1px rgba(0,0,0,0.4);
+  }
+
+  .preset-a .num {
+    font-size: 28px; line-height: 1; font-weight: 800;
+    color: #555e66; font-family: var(--display-font);
+    letter-spacing: -0.01em;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+    transition: color 280ms ease;
+  }
+
+  .preset-a .card.active .num { color: var(--slot-active); }
+
+  .preset-a .lbl {
+    font-weight: 750; font-size: 8px; line-height: 1;
+    letter-spacing: 0.08em; color: #555e66;
+    text-transform: uppercase; font-family: var(--display-font);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.3);
+    max-width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    text-align: center; transition: color 280ms ease;
+  }
+
+  .preset-a .card.active .lbl { color: var(--slot-label-active); }
+
+
+  /* ═══════════════════════════════════════════════════
+     B. CHROME BEZEL BUTTONS
+     High-end Alpine/Nakamichi — metallic frame around
+     each button, dark recessed face, clean and premium
+     ═══════════════════════════════════════════════════ */
+  .preset-b .card {
+    border-radius: 4px;
+    /* chrome bezel */
+    border: 1px solid rgba(180,185,192,0.35);
+    background:
+      linear-gradient(180deg,
+        rgba(160,165,172,0.18) 0%,
+        rgba(100,105,112,0.1) 3px,
+        rgba(8,10,14,0.95) 3px,
+        rgba(14,16,20,0.95) 100%
+      );
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.25),
+      inset 0 -1px 0 rgba(0,0,0,0.4),
+      0 1px 2px rgba(0,0,0,0.5),
+      0 0 0 0.5px rgba(0,0,0,0.6);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 200ms ease, box-shadow 200ms ease;
+    overflow: hidden;
+  }
+
+  .preset-b .card.active {
+    border-color: rgba(180,190,210,0.45);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.25),
+      inset 0 -1px 0 rgba(0,0,0,0.4),
+      0 0 0 1px var(--accent-outline),
+      0 0 14px var(--accent-glow),
+      0 1px 2px rgba(0,0,0,0.5);
+  }
+
+  .preset-b .btn {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; flex: 1; min-height: 0;
+    border: none; border-radius: 0;
+    background:
+      linear-gradient(180deg,
+        rgba(32,36,42,1) 0%,
+        rgba(22,25,30,1) 40%,
+        rgba(16,18,22,1) 100%
+      );
+    color: #656e76;
+    cursor: pointer;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2px; padding: 4px 4px 6px;
+    transition: background 100ms ease;
+    margin: 2px;
+    border-radius: 2px;
+    box-shadow:
+      inset 0 1px 3px rgba(0,0,0,0.4),
+      inset 0 -1px 0 rgba(255,255,255,0.03);
+  }
+
+  .preset-b .btn:hover {
+    background:
+      linear-gradient(180deg,
+        rgba(40,44,52,1) 0%,
+        rgba(28,32,38,1) 40%,
+        rgba(20,22,28,1) 100%
+      );
+  }
+
+  .preset-b .btn:active {
+    background:
+      linear-gradient(180deg, rgba(18,20,24,1) 0%, rgba(14,16,20,1) 100%);
+    box-shadow: inset 0 2px 5px rgba(0,0,0,0.6);
+  }
+
+  .preset-b .num {
+    font-size: 26px; line-height: 1; font-weight: 800;
+    color: #4a5058; font-family: var(--display-font);
+    letter-spacing: -0.02em;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.5);
+    transition: color 200ms ease;
+  }
+
+  .preset-b .card.active .num { color: var(--slot-active); text-shadow: 0 0 8px var(--accent-glow); }
+
+  .preset-b .lbl {
+    font-weight: 750; font-size: 7px; line-height: 1;
+    letter-spacing: 0.1em; color: #4a5058;
+    text-transform: uppercase; font-family: var(--display-font);
+    max-width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    text-align: center; transition: color 200ms ease;
+  }
+
+  .preset-b .card.active .lbl { color: var(--slot-label-active); }
+
+
+  /* ═══════════════════════════════════════════════════
+     C. BACKLIT MEMBRANE PANEL
+     Sony CDX-style — flat continuous panel, buttons
+     are flush. Active button glows from within.
+     ═══════════════════════════════════════════════════ */
+  .preset-c-wrap {
+    background:
+      linear-gradient(180deg, rgba(8,10,14,0.95) 0%, rgba(12,14,18,0.95) 100%);
+    border: 1px solid rgba(0,0,0,0.5);
+    border-radius: 5px;
+    box-shadow:
+      inset 0 1px 4px rgba(0,0,0,0.5),
+      inset 0 -1px 0 rgba(255,255,255,0.03),
+      0 1px 0 rgba(255,255,255,0.04);
+    padding: 4px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .preset-c {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+    height: 130px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .preset-c .btn {
+    -webkit-appearance: none; appearance: none;
+    border: none;
+    background: linear-gradient(180deg, rgba(20,23,28,1) 0%, rgba(16,18,22,1) 100%);
+    color: #484e56;
+    cursor: pointer;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2px; padding: 4px 4px 6px;
+    transition: all 180ms ease;
+    position: relative;
+  }
+
+  .preset-c .btn::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    background: radial-gradient(ellipse at center, var(--accent-glow) 0%, transparent 70%);
+    transition: opacity 250ms ease;
+    pointer-events: none;
+  }
+
+  .preset-c .btn:hover {
+    background: linear-gradient(180deg, rgba(26,30,36,1) 0%, rgba(20,22,28,1) 100%);
+    color: #6a7078;
+  }
+
+  .preset-c .btn:active {
+    background: linear-gradient(180deg, rgba(14,16,20,1) 0%, rgba(10,12,16,1) 100%);
+  }
+
+  .preset-c .btn.active {
+    color: #8aa0b8;
+  }
+
+  .preset-c .btn.active::after {
+    opacity: 1;
+  }
+
+  .preset-c .num {
+    font-size: 26px; line-height: 1; font-weight: 800;
+    font-family: var(--display-font);
+    letter-spacing: -0.01em;
+    transition: color 250ms ease, text-shadow 250ms ease;
+    position: relative; z-index: 1;
+  }
+
+  .preset-c .btn.active .num {
+    color: var(--slot-active);
+    text-shadow:
+      0 0 12px var(--accent-glow),
+      0 0 24px rgba(106,180,255,0.15);
+  }
+
+  .preset-c .lbl {
+    font-weight: 750; font-size: 7.5px; line-height: 1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase; font-family: var(--display-font);
+    max-width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    text-align: center; transition: color 250ms ease;
+    position: relative; z-index: 1;
+  }
+
+  .preset-c .btn.active .lbl {
+    color: var(--slot-label-active);
+    text-shadow: 0 0 8px var(--accent-glow);
+  }
+
+
+  /* ═══════════════════════════════════════════════════
+     D. LED EDGE RING BUTTONS
+     Kenwood KDC-style — similar raised buttons to
+     current, but active state uses a thin LED ring
+     around the perimeter instead of border glow
+     ═══════════════════════════════════════════════════ */
+  .preset-d .card {
+    border-radius: 5px;
+    border: 2px solid transparent;
+    background: linear-gradient(180deg, #0c0e12 0%, #101216 100%);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 200ms ease, box-shadow 200ms ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .preset-d .card::before {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: 6px;
+    border: 2px solid transparent;
+    transition: border-color 250ms ease, box-shadow 250ms ease;
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  .preset-d .card.active::before {
+    border-color: var(--accent-led);
+    box-shadow:
+      0 0 6px var(--accent-led-glow),
+      inset 0 0 6px var(--accent-led-glow);
+  }
+
+  .preset-d .btn {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; flex: 1; min-height: 0;
+    border: none; border-radius: 3px;
+    background:
+      linear-gradient(180deg,
+        rgba(38,42,48,1) 0%,
+        rgba(26,29,34,1) 35%,
+        rgba(18,20,24,1) 100%
+      );
+    color: #555c64;
+    cursor: pointer;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2px; padding: 4px 4px 6px;
+    margin: 2px;
+    transition: background 80ms ease, transform 80ms ease;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 2px 4px rgba(0,0,0,0.4);
+  }
+
+  .preset-d .btn:hover {
+    background:
+      linear-gradient(180deg,
+        rgba(46,50,58,1) 0%,
+        rgba(32,36,42,1) 35%,
+        rgba(22,24,30,1) 100%
+      );
+    color: #7a828a;
+  }
+
+  .preset-d .btn:active {
+    transform: translateY(1px);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.4), 0 0 1px rgba(0,0,0,0.3);
+  }
+
+  .preset-d .num {
+    font-size: 28px; line-height: 1; font-weight: 800;
+    color: inherit; font-family: var(--display-font);
+    letter-spacing: -0.01em;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.5);
+    transition: color 200ms ease;
+  }
+
+  .preset-d .card.active .num { color: var(--slot-active); }
+
+  .preset-d .lbl {
+    font-weight: 750; font-size: 7.5px; line-height: 1;
+    letter-spacing: 0.08em; color: inherit;
+    text-transform: uppercase; font-family: var(--display-font);
+    max-width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    text-align: center; transition: color 200ms ease;
+  }
+
+  .preset-d .card.active .lbl { color: var(--slot-label-active); }
+
+
+  /* ═══════════════════════════════════════════════════
+     E. HORIZONTAL STRIP + LED BAR
+     Blaupunkt/Grundig-style — wide horizontal buttons
+     in a 2x3 (2 cols, 3 rows) layout, LED bar on left
+     edge, number + label side by side
+     ═══════════════════════════════════════════════════ */
+  .preset-e {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    height: 130px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .preset-e .btn {
+    -webkit-appearance: none; appearance: none;
+    border: 1px solid rgba(0,0,0,0.4);
+    border-radius: 3px;
+    background:
+      linear-gradient(180deg,
+        rgba(30,34,40,0.95) 0%,
+        rgba(20,23,28,0.95) 50%,
+        rgba(16,18,22,0.95) 100%
+      );
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.06),
+      0 1px 2px rgba(0,0,0,0.4);
+    color: #4e555c;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+    transition: all 140ms ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* LED bar on left */
+  .preset-e .btn::before {
+    content: "";
+    position: absolute;
+    top: 20%;
+    bottom: 20%;
+    left: 0;
+    width: 3px;
+    border-radius: 0 2px 2px 0;
+    background: rgba(30,34,40,0.8);
+    transition: all 200ms ease;
+  }
+
+  .preset-e .btn:hover {
+    background:
+      linear-gradient(180deg,
+        rgba(38,42,50,0.95) 0%,
+        rgba(26,30,36,0.95) 50%,
+        rgba(20,22,28,0.95) 100%
+      );
+    color: #6e757c;
+  }
+
+  .preset-e .btn:active {
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.4);
+    transform: translateY(0.5px);
+  }
+
+  .preset-e .btn.active {
+    color: #8aa0b8;
+    border-color: rgba(77,130,194,0.15);
+  }
+
+  .preset-e .btn.active::before {
+    background: var(--accent-led);
+    box-shadow:
+      0 0 4px var(--accent-led-glow),
+      0 0 10px var(--accent-led-glow);
+  }
+
+  .preset-e .num {
+    font-size: 18px; line-height: 1; font-weight: 800;
+    font-family: var(--display-font);
+    letter-spacing: -0.02em;
+    transition: color 200ms ease;
+    min-width: 16px;
+    text-align: center;
+  }
+
+  .preset-e .btn.active .num { color: var(--slot-active); }
+
+  .preset-e .lbl {
+    font-weight: 700; font-size: 7.5px; line-height: 1;
+    letter-spacing: 0.06em;
+    text-transform: uppercase; font-family: var(--display-font);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    transition: color 200ms ease;
+    flex: 1;
+  }
+
+  .preset-e .btn.active .lbl { color: var(--slot-label-active); }
+</style>
+</head>
+<body>
+
+<h1>Marconio — Preset Grid Explorations</h1>
+
+<!-- A. Current -->
+<div class="exploration">
+  <span class="exploration__label">A — Current Design</span>
+  <span class="exploration__desc">Recessed card housing with a raised inner button. Number stacked above label. Soft accent glow on active state.</span>
+  <div class="unit-strip">
+    <div class="grid-3x2 preset-a">
+      <article class="card active" onclick="activateCard(this)"><button class="btn"><span class="num">1</span><span class="lbl">CH</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">2</span><span class="lbl">CH</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">3</span><span class="lbl">Sweat</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">4</span><span class="lbl">Sheet Music</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">5</span><span class="lbl">4 to the Floor</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">6</span><span class="lbl">Low Key</span></button></article>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- B. Chrome Bezel -->
+<div class="exploration">
+  <span class="exploration__label">B — Chrome Bezel Buttons</span>
+  <span class="exploration__desc">Alpine/Nakamichi-style metallic frame around a dark recessed face. Premium, high-end 90s deck aesthetic. Active glow bleeds from behind the chrome edge.</span>
+  <div class="unit-strip">
+    <div class="grid-3x2 preset-b">
+      <article class="card active" onclick="activateCard(this)"><button class="btn"><span class="num">1</span><span class="lbl">CH</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">2</span><span class="lbl">CH</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">3</span><span class="lbl">Sweat</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">4</span><span class="lbl">Sheet Music</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">5</span><span class="lbl">4 to the Floor</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">6</span><span class="lbl">Low Key</span></button></article>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- C. Backlit Membrane -->
+<div class="exploration">
+  <span class="exploration__label">C — Backlit Membrane Panel</span>
+  <span class="exploration__desc">Sony CDX-style flush continuous panel. Buttons are completely flat — no raised edges. Active button glows from within like a backlit membrane. Minimal, sleek.</span>
+  <div class="unit-strip">
+    <div class="preset-c-wrap">
+      <div class="preset-c">
+        <button class="btn active" onclick="activateFlat(this)"><span class="num">1</span><span class="lbl">CH</span></button>
+        <button class="btn" onclick="activateFlat(this)"><span class="num">2</span><span class="lbl">CH</span></button>
+        <button class="btn" onclick="activateFlat(this)"><span class="num">3</span><span class="lbl">Sweat</span></button>
+        <button class="btn" onclick="activateFlat(this)"><span class="num">4</span><span class="lbl">Sheet Music</span></button>
+        <button class="btn" onclick="activateFlat(this)"><span class="num">5</span><span class="lbl">4 to the Floor</span></button>
+        <button class="btn" onclick="activateFlat(this)"><span class="num">6</span><span class="lbl">Low Key</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- D. LED Edge Ring -->
+<div class="exploration">
+  <span class="exploration__label">D — LED Edge Ring</span>
+  <span class="exploration__desc">Kenwood KDC-style — similar raised button structure to current, but active state uses a bright thin LED ring around the entire button perimeter. Sharper, more defined selection indicator.</span>
+  <div class="unit-strip">
+    <div class="grid-3x2 preset-d">
+      <article class="card active" onclick="activateCard(this)"><button class="btn"><span class="num">1</span><span class="lbl">CH</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">2</span><span class="lbl">CH</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">3</span><span class="lbl">Sweat</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">4</span><span class="lbl">Sheet Music</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">5</span><span class="lbl">4 to the Floor</span></button></article>
+      <article class="card" onclick="activateCard(this)"><button class="btn"><span class="num">6</span><span class="lbl">Low Key</span></button></article>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- E. Horizontal Strip -->
+<div class="exploration">
+  <span class="exploration__label">E — Horizontal Strip + LED Bar</span>
+  <span class="exploration__desc">Blaupunkt/Grundig-style — wider horizontal buttons in a 2-column layout. LED bar on the left edge illuminates for the active preset. Number and label sit side by side. Compact, information-dense.</span>
+  <div class="unit-strip">
+    <div class="preset-e">
+      <button class="btn active" onclick="activateFlat(this)"><span class="num">1</span><span class="lbl">CH</span></button>
+      <button class="btn" onclick="activateFlat(this)"><span class="num">2</span><span class="lbl">CH</span></button>
+      <button class="btn" onclick="activateFlat(this)"><span class="num">3</span><span class="lbl">Sweat</span></button>
+      <button class="btn" onclick="activateFlat(this)"><span class="num">4</span><span class="lbl">Sheet Music</span></button>
+      <button class="btn" onclick="activateFlat(this)"><span class="num">5</span><span class="lbl">4 to the Floor</span></button>
+      <button class="btn" onclick="activateFlat(this)"><span class="num">6</span><span class="lbl">Low Key</span></button>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* card-based grids (A, B, D) */
+  function activateCard(card) {
+    const grid = card.parentElement;
+    grid.querySelectorAll('.card').forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+  }
+
+  /* flat button grids (C, E) */
+  function activateFlat(btn) {
+    const grid = btn.parentElement;
+    grid.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+</script>
+
+</body>
+</html>

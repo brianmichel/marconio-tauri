@@ -5,12 +5,16 @@ const MAIN_FONT_SIZE = 20;
 const SUB_FONT_SIZE = 10;
 const META_FONT_SIZE = 8;
 const SCROLL_GAP = 4;
+const SCRAMBLE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const TUNING_FRAME_MS = 90;
+const TUNING_FRAMES = 5;
 
 const props = defineProps<{
   primaryText: string;
   secondaryText: string;
   metaText: string;
   themeAnimating: boolean;
+  tuning: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -25,6 +29,76 @@ const mainScrollPos = ref(0);
 const subScrollPos = ref(0);
 let mainScrollTimer: ReturnType<typeof setTimeout> | null = null;
 let subScrollTimer: ReturnType<typeof setTimeout> | null = null;
+
+/* ── Tuning scramble state ── */
+const scrambleMain = ref("");
+const scrambleSub = ref("");
+const scrambleMeta = ref("");
+const isScrambling = ref(false);
+let scrambleTimer: ReturnType<typeof setTimeout> | null = null;
+
+function randomChar(): string {
+  return SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)];
+}
+
+/** Build a string that is resolved (real text) up to `resolvedCount` chars,
+ *  with scrambled random chars for the rest. */
+function partialResolve(real: string, cols: number, resolvedCount: number): string {
+  const cleaned = dsegClean(real).padEnd(cols, "!");
+  let out = "";
+  for (let i = 0; i < cols; i++) {
+    if (i < resolvedCount) {
+      out += cleaned[i] ?? "!";
+    } else {
+      out += randomChar();
+    }
+  }
+  return out;
+}
+
+function stopScramble() {
+  if (scrambleTimer) {
+    clearTimeout(scrambleTimer);
+    scrambleTimer = null;
+  }
+  isScrambling.value = false;
+}
+
+function startScramble() {
+  stopScramble();
+  isScrambling.value = true;
+  let frame = 0;
+
+  function tick() {
+    if (frame >= TUNING_FRAMES) {
+      stopScramble();
+      return;
+    }
+
+    // Characters resolve progressively left-to-right across frames
+    const mainResolved = Math.floor((frame / TUNING_FRAMES) * mainCols.value);
+    const subResolved = Math.floor((frame / TUNING_FRAMES) * subCols.value);
+    const metaResolved = Math.floor((frame / TUNING_FRAMES) * metaCols.value);
+
+    scrambleMain.value = partialResolve(props.primaryText, mainCols.value, mainResolved);
+    scrambleSub.value = partialResolve(props.secondaryText, subCols.value, subResolved);
+    scrambleMeta.value = partialResolve(props.metaText, metaCols.value, metaResolved);
+
+    frame++;
+    scrambleTimer = setTimeout(tick, TUNING_FRAME_MS);
+  }
+
+  tick();
+}
+
+watch(
+  () => props.tuning,
+  (value) => {
+    if (value) {
+      startScramble();
+    }
+  },
+);
 
 function dsegClean(text: string): string {
   return text.replace(/ /g, "!").replace(/:/g, "-");
@@ -50,15 +124,20 @@ function cleanedLength(text: string): number {
   return dsegClean(text).length;
 }
 
-const mainVisible = computed(() =>
-  visibleSlice(props.primaryText, mainCols.value, mainScrollPos.value),
-);
+const mainVisible = computed(() => {
+  if (isScrambling.value) return scrambleMain.value;
+  return visibleSlice(props.primaryText, mainCols.value, mainScrollPos.value);
+});
 
-const subVisible = computed(() =>
-  visibleSlice(props.secondaryText, subCols.value, subScrollPos.value),
-);
+const subVisible = computed(() => {
+  if (isScrambling.value) return scrambleSub.value;
+  return visibleSlice(props.secondaryText, subCols.value, subScrollPos.value);
+});
 
-const metaVisible = computed(() => visibleSlice(props.metaText, metaCols.value, 0));
+const metaVisible = computed(() => {
+  if (isScrambling.value) return scrambleMeta.value;
+  return visibleSlice(props.metaText, metaCols.value, 0);
+});
 
 function measureCols() {
   const el = lcdRef.value;
@@ -164,6 +243,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", restartScrollAndMeasure);
   stopMainScroll();
   stopSubScroll();
+  stopScramble();
 });
 </script>
 
@@ -171,7 +251,10 @@ onBeforeUnmount(() => {
   <section
     ref="lcdRef"
     class="lcd"
-    :class="{ 'lcd--theme-animating': props.themeAnimating }"
+    :class="{
+      'lcd--theme-animating': props.themeAnimating,
+      'lcd--tuning': isScrambling,
+    }"
     aria-live="polite"
     @click="onCycleTheme"
   >
@@ -253,6 +336,25 @@ onBeforeUnmount(() => {
 
 .lcd--theme-animating {
   animation: lcd-flicker 450ms linear;
+}
+
+.lcd--tuning {
+  animation: lcd-tuning 450ms ease-out;
+}
+
+@keyframes lcd-tuning {
+  0% {
+    filter: brightness(0.9) saturate(0.85);
+  }
+  30% {
+    filter: brightness(1.06) saturate(1.04);
+  }
+  60% {
+    filter: brightness(0.95) saturate(0.95);
+  }
+  100% {
+    filter: brightness(1) saturate(1);
+  }
 }
 
 @keyframes lcd-flicker {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import {
   createNTSClient,
   playableFromChannel,
@@ -10,10 +11,13 @@ import {
 import LcdDisplay from "./components/receiver/LcdDisplay.vue";
 import PresetGrid from "./components/receiver/PresetGrid.vue";
 import PresetContextMenu from "./components/receiver/PresetContextMenu.vue";
+import AudioFxSegmentedControl from "./components/receiver/AudioFxSegmentedControl.vue";
+import { AUDIO_FX_PRESETS, type AudioFxPreset } from "./audio/fxPresets";
 
 const client = createNTSClient();
 const STORAGE_KEY = "nts-user-presets-v1";
 const LCD_THEME_KEY = "lcd-theme-v1";
+const AUDIO_FX_KEY = "audio-fx-preset-v2";
 const USER_SLOTS = [3, 4, 5, 6] as const;
 const LCD_THEMES = ["amber", "blue", "green", "purpleRed"] as const;
 
@@ -28,10 +32,11 @@ const errorMessage = ref<string | null>(null);
 const currentPlayable = ref<MediaPlayable | null>(null);
 const activeSlot = ref<number | null>(null);
 const isPlaying = ref(false);
-const audioRef = ref<HTMLAudioElement | null>(null);
 const isLcdThemeAnimating = ref(false);
 let lcdThemeAnimationTimer: ReturnType<typeof setTimeout> | null = null;
+const isLcdTuning = ref(false);
 const BLOCKED_BROWSER_SHORTCUTS = new Set(["a", "r", "+", "=", "-", "0"]);
+const IS_DEV = import.meta.env.DEV;
 const EDITABLE_TARGET_SELECTOR = [
   "input:not([readonly]):not([disabled])",
   "textarea:not([readonly]):not([disabled])",
@@ -51,6 +56,28 @@ function readLcdTheme(): LcdTheme {
   }
 
   return "amber";
+}
+
+function readAudioFxPreset(): AudioFxPreset {
+  try {
+    const stored = localStorage.getItem(AUDIO_FX_KEY);
+    if (stored && AUDIO_FX_PRESETS.some((preset) => preset.id === stored)) {
+      return stored as AudioFxPreset;
+    }
+  } catch {
+    // Ignore localStorage access errors and keep default preset.
+  }
+
+  return "clean";
+}
+
+function canUseTauriInvoke() {
+  return (
+    typeof window !== "undefined" &&
+    "__TAURI_INTERNALS__" in window &&
+    typeof (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !==
+      "undefined"
+  );
 }
 
 function cycleLcdTheme() {
@@ -111,6 +138,7 @@ function readAssignments(): PresetAssignments {
 
 const assignments = ref<PresetAssignments>(readAssignments());
 const lcdTheme = ref<LcdTheme>(readLcdTheme());
+const audioFxPreset = ref<AudioFxPreset>(readAudioFxPreset());
 
 watch(
   assignments,
@@ -123,6 +151,25 @@ watch(
 watch(lcdTheme, (value) => {
   localStorage.setItem(LCD_THEME_KEY, value);
 });
+
+watch(
+  audioFxPreset,
+  (value) => {
+    try {
+      localStorage.setItem(AUDIO_FX_KEY, value);
+    } catch {
+      // Ignore storage errors.
+    }
+    if (!canUseTauriInvoke()) {
+      return;
+    }
+    void invoke("set_audio_fx_preset", { preset: value })
+      .catch((error) => {
+        console.warn("[audio] Unable to set native preset", error);
+      });
+  },
+  { immediate: true },
+);
 
 const channelOne = computed(
   () =>
@@ -192,6 +239,10 @@ const lcdMeta = computed(() => {
       : "READY";
   return `${play} ${status}`;
 });
+
+function setAudioFxPreset(preset: AudioFxPreset) {
+  audioFxPreset.value = preset;
+}
 
 const presetCards = computed(() => {
   return [1, 2, 3, 4, 5, 6].map((slot) => {
@@ -279,19 +330,19 @@ async function loadPlayableMedia() {
 }
 
 async function startPlayback(playable: MediaPlayable, slot: number) {
+  isLcdTuning.value = true;
+  setTimeout(() => { isLcdTuning.value = false; }, 400);
   currentPlayable.value = playable;
   activeSlot.value = slot;
   errorMessage.value = null;
 
-  const audio = audioRef.value;
-  if (!audio) {
+  if (!canUseTauriInvoke()) {
+    errorMessage.value = "Native playback requires a Tauri runtime.";
     return;
   }
 
-  audio.src = playable.streamUrl;
-
   try {
-    await audio.play();
+    await invoke("start_native_stream", { streamUrl: playable.streamUrl });
     isPlaying.value = true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -300,14 +351,19 @@ async function startPlayback(playable: MediaPlayable, slot: number) {
   }
 }
 
-function stopPlayback() {
-  const audio = audioRef.value;
-  if (!audio) {
+async function stopPlayback() {
+  if (!canUseTauriInvoke()) {
+    isPlaying.value = false;
     return;
   }
 
-  audio.pause();
-  isPlaying.value = false;
+  try {
+    await invoke("stop_native_stream");
+  } catch (error) {
+    console.warn("[audio] Unable to stop native playback", error);
+  } finally {
+    isPlaying.value = false;
+  }
 }
 
 const modelMenuVisible = ref(false);
@@ -381,7 +437,7 @@ function clearUserSlot(slot: UserSlot) {
   assignments.value[slot] = null;
   closeContextMenu();
   if (activeSlot.value === slot) {
-    stopPlayback();
+    void stopPlayback();
     activeSlot.value = null;
     currentPlayable.value = null;
   }
@@ -442,6 +498,10 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 function preventBrowserContextMenu(event: MouseEvent) {
+  if (IS_DEV) {
+    return;
+  }
+
   if (isEditableTarget(event.target)) {
     return;
   }
@@ -466,6 +526,15 @@ onMounted(async () => {
   window.addEventListener("contextmenu", preventBrowserContextMenu);
   window.addEventListener("dragover", preventDocumentDrop);
   window.addEventListener("drop", preventDocumentDrop);
+
+  if (canUseTauriInvoke()) {
+    try {
+      await invoke("set_audio_fx_preset", { preset: audioFxPreset.value });
+    } catch (error) {
+      console.warn("[audio] Unable to initialize native preset", error);
+    }
+  }
+
   loadPlayableMedia();
 });
 
@@ -475,10 +544,10 @@ onBeforeUnmount(() => {
   window.removeEventListener("dragover", preventDocumentDrop);
   window.removeEventListener("drop", preventDocumentDrop);
   controller?.abort();
-  const audio = audioRef.value;
-  if (audio) {
-    audio.pause();
-    audio.src = "";
+  if (canUseTauriInvoke()) {
+    void invoke("stop_native_stream").catch(() => {
+      // Ignore cleanup errors.
+    });
   }
   if (lcdThemeAnimationTimer) {
     clearTimeout(lcdThemeAnimationTimer);
@@ -528,7 +597,7 @@ function onGlobalKeyDown(event: KeyboardEvent) {
     event.preventDefault();
 
     if (isPlaying.value) {
-      stopPlayback();
+      void stopPlayback();
       return;
     }
 
@@ -556,29 +625,10 @@ function onGlobalKeyDown(event: KeyboardEvent) {
         @mousedown.left="startWindowDrag"
       />
       <header class="unit-header" data-tauri-drag-region>
-        <p class="brand">MARCONIO</p>
-      </header>
-
-      <LcdDisplay
-        :primary-text="lcdPrimary"
-        :secondary-text="lcdSecondary"
-        :meta-text="lcdMeta"
-        :theme-animating="isLcdThemeAnimating"
-        @cycle-theme="cycleLcdTheme"
-      />
-
-      <PresetGrid
-        :cards="presetCards"
-        :active-slot="activeSlot"
-        :set-button-ref="setPresetButtonRef"
-        @press-slot="onPresetPress"
-        @open-slot-context="onPresetContextMenu($event.event, $event.slot, $event.locked)"
-      />
-
-      <footer class="unit-footer" data-tauri-drag-region>
-        <p class="tagline">STREAMING RECEIVER</p>
         <div class="model-wrap">
-          <button type="button" class="model" @click="toggleModelMenu">MRC-1900</button>
+          <button type="button" class="brand-plate" @click="toggleModelMenu">
+            <span class="brand">MRC-1900</span>
+          </button>
           <div v-if="modelMenuVisible" class="model-backdrop" @mousedown="closeModelMenu" />
           <div v-if="modelMenuVisible" class="model-menu" @mousedown.stop>
             <button
@@ -599,9 +649,37 @@ function onGlobalKeyDown(event: KeyboardEvent) {
             </button>
           </div>
         </div>
-      </footer>
+      </header>
 
-      <audio ref="audioRef" preload="none" @pause="isPlaying = false" @play="isPlaying = true" />
+      <LcdDisplay
+        :primary-text="lcdPrimary"
+        :secondary-text="lcdSecondary"
+        :meta-text="lcdMeta"
+        :theme-animating="isLcdThemeAnimating"
+        :tuning="isLcdTuning"
+        @cycle-theme="cycleLcdTheme"
+      />
+
+      <PresetGrid
+        :cards="presetCards"
+        :active-slot="activeSlot"
+        :set-button-ref="setPresetButtonRef"
+        @press-slot="onPresetPress"
+        @open-slot-context="onPresetContextMenu($event.event, $event.slot, $event.locked)"
+      />
+
+      <AudioFxSegmentedControl
+        class="fx-segmented-row"
+        :presets="AUDIO_FX_PRESETS"
+        :model-value="audioFxPreset"
+        @update:model-value="setAudioFxPreset"
+      />
+
+      <footer class="unit-footer" data-tauri-drag-region>
+        <div class="footer-line" />
+        <p class="tagline">STREAMING RECEIVER</p>
+        <div class="footer-line" />
+      </footer>
 
       <PresetContextMenu
         :visible="contextMenu.visible"
