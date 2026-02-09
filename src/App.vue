@@ -34,6 +34,7 @@ const activeSlot = ref<number | null>(null);
 const isPlaying = ref(false);
 const isLcdThemeAnimating = ref(false);
 let lcdThemeAnimationTimer: ReturnType<typeof setTimeout> | null = null;
+const isLcdTuning = ref(false);
 const BLOCKED_BROWSER_SHORTCUTS = new Set(["a", "r", "+", "=", "-", "0"]);
 const IS_DEV = import.meta.env.DEV;
 const EDITABLE_TARGET_SELECTOR = [
@@ -329,6 +330,8 @@ async function loadPlayableMedia() {
 }
 
 async function startPlayback(playable: MediaPlayable, slot: number) {
+  isLcdTuning.value = true;
+  setTimeout(() => { isLcdTuning.value = false; }, 400);
   currentPlayable.value = playable;
   activeSlot.value = slot;
   errorMessage.value = null;
@@ -653,6 +656,7 @@ function onGlobalKeyDown(event: KeyboardEvent) {
         :secondary-text="lcdSecondary"
         :meta-text="lcdMeta"
         :theme-animating="isLcdThemeAnimating"
+        :tuning="isLcdTuning"
         @cycle-theme="cycleLcdTheme"
       />
 
