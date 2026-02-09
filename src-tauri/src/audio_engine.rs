@@ -170,6 +170,7 @@ struct FxProcessor {
     mid_peak: Option<Biquad>,
     low_shelf: Option<Biquad>,
     distortion_drive: f32,
+    saturation_mix: f32,
     compressor_threshold: f32,
     compressor_ratio: f32,
     makeup_gain: f32,
@@ -186,6 +187,7 @@ impl FxProcessor {
             mid_peak: None,
             low_shelf: None,
             distortion_drive: 1.0,
+            saturation_mix: 0.0,
             compressor_threshold: 1.0,
             compressor_ratio: 1.0,
             makeup_gain: 1.0,
@@ -211,6 +213,7 @@ impl FxProcessor {
         self.mid_peak = None;
         self.low_shelf = None;
         self.distortion_drive = 1.0;
+        self.saturation_mix = 0.0;
         self.compressor_threshold = 1.0;
         self.compressor_ratio = 1.0;
         self.makeup_gain = 1.0;
@@ -220,32 +223,35 @@ impl FxProcessor {
         match self.preset {
             AudioFxPreset::Clean => {}
             AudioFxPreset::Cassette => {
-                self.high_pass = Some(Biquad::highpass(sr, 220.0, 0.707, channels));
-                self.low_pass = Some(Biquad::lowpass(sr, 3200.0, 0.707, channels));
-                self.mid_peak = Some(Biquad::peaking(sr, 3000.0, 2.3, -8.5, channels));
-                self.distortion_drive = 3.8;
-                self.compressor_threshold = 0.30;
-                self.compressor_ratio = 5.0;
-                self.makeup_gain = 1.6;
+                self.high_pass = Some(Biquad::highpass(sr, 105.0, 0.75, channels));
+                self.low_pass = Some(Biquad::lowpass(sr, 6400.0, 0.82, channels));
+                self.mid_peak = Some(Biquad::peaking(sr, 2700.0, 1.35, -3.1, channels));
+                self.distortion_drive = 1.42;
+                self.saturation_mix = 0.44;
+                self.compressor_threshold = 0.67;
+                self.compressor_ratio = 2.9;
+                self.makeup_gain = 1.08;
             }
             AudioFxPreset::Bass => {
                 self.high_pass = Some(Biquad::highpass(sr, 26.0, 0.707, channels));
-                self.low_shelf = Some(Biquad::lowshelf(sr, 82.0, 1.0, 22.0, channels));
-                self.mid_peak = Some(Biquad::peaking(sr, 190.0, 1.6, 14.0, channels));
-                self.low_pass = Some(Biquad::lowpass(sr, 1450.0, 0.707, channels));
-                self.distortion_drive = 5.4;
-                self.compressor_threshold = 0.23;
-                self.compressor_ratio = 8.5;
-                self.makeup_gain = 1.95;
+                self.low_shelf = Some(Biquad::lowshelf(sr, 92.0, 0.9, 7.4, channels));
+                self.mid_peak = Some(Biquad::peaking(sr, 180.0, 1.0, 4.0, channels));
+                self.low_pass = Some(Biquad::lowpass(sr, 9300.0, 0.8, channels));
+                self.distortion_drive = 1.36;
+                self.saturation_mix = 0.36;
+                self.compressor_threshold = 0.69;
+                self.compressor_ratio = 2.7;
+                self.makeup_gain = 1.1;
             }
             AudioFxPreset::Radio => {
-                self.high_pass = Some(Biquad::highpass(sr, 950.0, 0.8, channels));
-                self.low_pass = Some(Biquad::lowpass(sr, 1450.0, 0.8, channels));
-                self.mid_peak = Some(Biquad::peaking(sr, 1180.0, 3.4, 17.0, channels));
-                self.distortion_drive = 7.0;
-                self.compressor_threshold = 0.18;
-                self.compressor_ratio = 12.0;
-                self.makeup_gain = 2.4;
+                self.high_pass = Some(Biquad::highpass(sr, 360.0, 0.85, channels));
+                self.low_pass = Some(Biquad::lowpass(sr, 3300.0, 0.85, channels));
+                self.mid_peak = Some(Biquad::peaking(sr, 1750.0, 1.65, 6.8, channels));
+                self.distortion_drive = 1.8;
+                self.saturation_mix = 0.58;
+                self.compressor_threshold = 0.6;
+                self.compressor_ratio = 4.4;
+                self.makeup_gain = 1.12;
             }
         }
     }
@@ -272,7 +278,8 @@ impl FxProcessor {
                 value = filter.process(channel, value);
             }
 
-            value = (value * self.distortion_drive).tanh();
+            let saturated = (value * self.distortion_drive).tanh() / self.distortion_drive;
+            value = value + (saturated - value) * self.saturation_mix;
             value = self.compress(value);
             value *= self.makeup_gain;
 
