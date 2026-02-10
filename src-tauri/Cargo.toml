@@ -26,5 +26,5 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "blo
 rodio = { version = "0.20", default-features = true }
 minimp3 = "0.5"
 
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 souvlaki = "0.8"
