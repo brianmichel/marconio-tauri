@@ -217,6 +217,13 @@ function onCycleTheme() {
   emit("cycleTheme");
 }
 
+function onKeyDown(event: KeyboardEvent) {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    onCycleTheme();
+  }
+}
+
 watch(
   () => props.primaryText,
   () => {
@@ -255,8 +262,12 @@ onBeforeUnmount(() => {
       'lcd--theme-animating': props.themeAnimating,
       'lcd--tuning': isScrambling,
     }"
+    role="button"
+    tabindex="0"
+    aria-label="Cycle display theme"
     aria-live="polite"
     @click="onCycleTheme"
+    @keydown="onKeyDown"
   >
     <div class="lcd-row lcd-row--main" aria-hidden="true">
       <span v-for="i in mainCols" :key="`main-${i}`" class="lcd-cell">

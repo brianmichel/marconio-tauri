@@ -512,6 +512,10 @@ function onPresetPress(slot: number) {
     void startPlayback(card.playable, slot);
     return;
   }
+
+  if (!card.locked && slot >= 3 && slot <= 6) {
+    openContextMenuForSlot(slot as UserSlot);
+  }
 }
 
 function onPresetContextMenu(event: MouseEvent, slot: number, locked: boolean) {
@@ -520,6 +524,14 @@ function onPresetContextMenu(event: MouseEvent, slot: number, locked: boolean) {
   }
 
   openContextMenu(event, slot as UserSlot);
+}
+
+function onPresetContextMenuByKeyboard(slot: number) {
+  if (slot < 3 || slot > 6) {
+    return;
+  }
+
+  openContextMenuForSlot(slot as UserSlot);
 }
 
 function onPresetHotkey(slot: number) {
@@ -691,14 +703,29 @@ function onGlobalKeyDown(event: KeyboardEvent) {
       />
       <header class="unit-header" data-tauri-drag-region>
         <div class="model-wrap">
-          <button type="button" class="brand-plate" @click="toggleModelMenu">
+          <button
+            type="button"
+            class="brand-plate"
+            aria-haspopup="menu"
+            aria-controls="receiver-model-menu"
+            :aria-expanded="modelMenuVisible ? 'true' : 'false'"
+            @click="toggleModelMenu"
+          >
             <span class="brand">MRC-1900</span>
           </button>
           <div v-if="modelMenuVisible" class="model-backdrop" @mousedown="closeModelMenu" />
-          <div v-if="modelMenuVisible" class="model-menu" @mousedown.stop>
+          <div
+            v-if="modelMenuVisible"
+            id="receiver-model-menu"
+            class="model-menu"
+            role="menu"
+            aria-label="Receiver controls"
+            @mousedown.stop
+          >
             <button
               type="button"
               class="model-menu-item"
+              role="menuitem"
               :disabled="isLoading"
               @click="loadPlayableMedia(); closeModelMenu()"
             >
@@ -707,6 +734,7 @@ function onGlobalKeyDown(event: KeyboardEvent) {
             <button
               type="button"
               class="model-menu-item"
+              role="menuitem"
               :disabled="!isPlaying"
               @click="stopPlayback(); closeModelMenu()"
             >
@@ -731,6 +759,7 @@ function onGlobalKeyDown(event: KeyboardEvent) {
         :set-button-ref="setPresetButtonRef"
         @press-slot="onPresetPress"
         @open-slot-context="onPresetContextMenu($event.event, $event.slot, $event.locked)"
+        @open-slot-context-by-keyboard="onPresetContextMenuByKeyboard"
       />
 
       <AudioFxSegmentedControl

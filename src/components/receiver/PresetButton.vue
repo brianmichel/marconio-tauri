@@ -2,6 +2,7 @@
 const props = defineProps<{
   slot: number;
   label: string;
+  accessibleLabel: string;
   active: boolean;
   locked: boolean;
   empty: boolean;
@@ -11,6 +12,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   press: [slot: number];
   openContext: [payload: { event: MouseEvent; slot: number; locked: boolean }];
+  openContextByKeyboard: [slot: number];
 }>();
 
 function onPress() {
@@ -23,6 +25,17 @@ function onContextMenu(event: MouseEvent) {
     slot: props.slot,
     locked: props.locked,
   });
+}
+
+function onKeyDown(event: KeyboardEvent) {
+  if (props.locked) {
+    return;
+  }
+
+  if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+    event.preventDefault();
+    emit("openContextByKeyboard", props.slot);
+  }
 }
 </script>
 
@@ -39,8 +52,12 @@ function onContextMenu(event: MouseEvent) {
       type="button"
       class="preset-button"
       :ref="props.setButtonRef"
+      :aria-label="props.accessibleLabel"
+      :aria-pressed="props.active ? 'true' : 'false'"
+      :aria-haspopup="props.locked ? undefined : 'menu'"
       @click="onPress"
       @contextmenu.prevent="onContextMenu"
+      @keydown="onKeyDown"
     >
       <span class="slot-number">{{ props.slot }}</span>
       <span class="slot-label">

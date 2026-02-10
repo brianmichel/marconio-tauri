@@ -20,6 +20,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   pressSlot: [slot: number];
   openSlotContext: [payload: { event: MouseEvent; slot: number; locked: boolean }];
+  openSlotContextByKeyboard: [slot: number];
 }>();
 
 function labelForCard(card: PresetGridCard): string {
@@ -34,12 +35,29 @@ function labelForCard(card: PresetGridCard): string {
   return "+";
 }
 
+function accessibleLabelForCard(card: PresetGridCard): string {
+  if (card.locked) {
+    const source = card.playable ? card.playable.title : `Channel ${card.slot}`;
+    return `Channel ${card.slot}. ${source}. Press to play.`;
+  }
+
+  if (card.playable) {
+    return `Preset ${card.slot}. ${card.playable.title}. Press to play.`;
+  }
+
+  return `Preset ${card.slot} is unassigned. Press to choose a mixtape.`;
+}
+
 function onPressSlot(slot: number) {
   emit("pressSlot", slot);
 }
 
 function onOpenSlotContext(payload: { event: MouseEvent; slot: number; locked: boolean }) {
   emit("openSlotContext", payload);
+}
+
+function onOpenSlotContextByKeyboard(slot: number) {
+  emit("openSlotContextByKeyboard", slot);
 }
 </script>
 
@@ -50,12 +68,14 @@ function onOpenSlotContext(payload: { event: MouseEvent; slot: number; locked: b
       :key="card.slot"
       :slot="card.slot"
       :label="labelForCard(card)"
+      :accessible-label="accessibleLabelForCard(card)"
       :active="props.activeSlot === card.slot"
       :locked="card.locked"
       :empty="!card.playable"
       :set-button-ref="(el) => props.setButtonRef?.(card.slot, el)"
       @press="onPressSlot"
       @open-context="onOpenSlotContext"
+      @open-context-by-keyboard="onOpenSlotContextByKeyboard"
     />
   </section>
 </template>
