@@ -1,6 +1,7 @@
 name: Test
 
 on:
+  pull_request:
   push:
     branches:
       - main
@@ -10,8 +11,14 @@ permissions:
 
 jobs:
   test:
-    name: Run Tests
-    runs-on: ubuntu-latest
+    name: Validate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,3 +33,12 @@ jobs:
 
       - name: Run tests
         run: deno task test
+
+      - name: Build frontend
+        run: deno task build
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Tauri app (no bundle)
+        run: deno task tauri build --no-bundle
