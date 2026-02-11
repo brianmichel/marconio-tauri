@@ -55,10 +55,10 @@ defineEmits<{
     0 2px 4px rgba(0, 0, 0, 0.5),
     0 1px 1px rgba(0, 0, 0, 0.3);
   color: #6e747a;
-  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
-  font-size: 7.5px;
+  font-family: var(--display-font, "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif);
+  font-size: var(--segmented-font-size, 7.5px);
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: var(--segmented-letter-spacing, 0.1em);
   padding: 8px 4px 6px;
   text-transform: uppercase;
   cursor: pointer;

@@ -86,6 +86,15 @@ pub fn run() {
     tauri::Builder::default()
         .manage(Mutex::new(PlaybackManager::default()))
         .setup(|app| {
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    if let Err(error) = window.set_decorations(false) {
+                        eprintln!("[window] unable to disable native decorations: {}", error);
+                    }
+                }
+            }
+
             let state = app.state::<Mutex<PlaybackManager>>();
             match state.lock() {
                 Ok(mut manager) => manager.initialize_media_controls(app.handle().clone()),

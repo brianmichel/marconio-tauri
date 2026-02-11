@@ -41,6 +41,7 @@ const errorMessage = ref<string | null>(null);
 const currentPlayable = ref<MediaPlayable | null>(null);
 const activeSlot = ref<number | null>(null);
 const isPlaying = ref(false);
+const isWindows = ref(false);
 const isLcdThemeAnimating = ref(false);
 let lcdThemeAnimationTimer: ReturnType<typeof setTimeout> | null = null;
 const isLcdTuning = ref(false);
@@ -87,6 +88,16 @@ function canUseTauriInvoke() {
     typeof (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !==
       "undefined"
   );
+}
+
+function detectWindowsPlatform() {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+
+  const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+  const probe = `${nav.userAgentData?.platform ?? ""} ${navigator.platform ?? ""} ${navigator.userAgent ?? ""}`;
+  return /windows|win32|win64|wow64/i.test(probe);
 }
 
 function nowPlayingFromPlayable(playable: MediaPlayable) {
@@ -610,7 +621,25 @@ async function startWindowDrag() {
   }
 }
 
+async function minimizeWindow() {
+  try {
+    await getCurrentWindow().minimize();
+  } catch {
+    // Ignore window control errors outside Tauri.
+  }
+}
+
+async function closeWindow() {
+  try {
+    await getCurrentWindow().close();
+  } catch {
+    // Ignore window control errors outside Tauri.
+  }
+}
+
 onMounted(async () => {
+  isWindows.value = detectWindowsPlatform();
+
   window.addEventListener("keydown", onGlobalKeyDown);
   window.addEventListener("contextmenu", preventBrowserContextMenu);
   window.addEventListener("dragover", preventDocumentDrop);
@@ -726,13 +755,33 @@ function onGlobalKeyDown(event: KeyboardEvent) {
 
 <template>
   <main class="scene">
-    <div class="unit" :class="`theme--${lcdTheme}`">
+    <div class="unit" :class="[`theme--${lcdTheme}`, { 'unit--windows': isWindows }]">
       <div
         class="drag-strip"
         data-tauri-drag-region
         role="presentation"
         @mousedown.left="startWindowDrag"
       />
+      <div v-if="isWindows" class="window-controls" role="toolbar" aria-label="Window controls">
+        <button
+          type="button"
+          class="window-control-btn"
+          aria-label="Minimize window"
+          @mousedown.stop
+          @click.stop="minimizeWindow"
+        >
+          <span class="window-control-glyph" aria-hidden="true">-</span>
+        </button>
+        <button
+          type="button"
+          class="window-control-btn window-control-btn--close"
+          aria-label="Close window"
+          @mousedown.stop
+          @click.stop="closeWindow"
+        >
+          <span class="window-control-glyph" aria-hidden="true">X</span>
+        </button>
+      </div>
       <header class="unit-header" data-tauri-drag-region>
         <div class="model-wrap">
           <button

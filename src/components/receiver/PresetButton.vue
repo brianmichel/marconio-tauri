@@ -167,9 +167,9 @@ function onKeyDown(event: KeyboardEvent) {
 
 .slot-label {
   font-weight: 750;
-  font-size: 8px;
+  font-size: var(--preset-label-font-size, 8px);
   line-height: 1;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--preset-label-letter-spacing, 0.08em);
   color: #555e66;
   text-transform: uppercase;
   font-family: var(--display-font);

@@ -30,9 +30,12 @@ body {
   background: #111315;
   overflow: hidden;
   font-family:
+    "Segoe UI Variable Text",
+    "Segoe UI",
     "SF Pro Text",
     -apple-system,
     BlinkMacSystemFont,
     "Helvetica Neue",
+    system-ui,
     sans-serif;
 }
