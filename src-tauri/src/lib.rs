@@ -89,7 +89,9 @@ pub fn run() {
             let state = app.state::<Mutex<PlaybackManager>>();
             match state.lock() {
                 Ok(mut manager) => manager.initialize_media_controls(app.handle().clone()),
-                Err(_) => eprintln!("[audio] unable to initialize media controls: state lock poisoned"),
+                Err(_) => {
+                    eprintln!("[audio] unable to initialize media controls: state lock poisoned")
+                }
             }
             Ok(())
         })

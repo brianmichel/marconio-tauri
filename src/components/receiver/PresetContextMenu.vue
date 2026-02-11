@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { nextTick, ref, watch } from "vue";
+
 interface PresetOption {
   alias: string;
   title: string;
@@ -30,21 +32,43 @@ function assign(alias: string) {
 function clearSlot() {
   emit("clear");
 }
+
+const menuRef = ref<HTMLElement | null>(null);
+
+function focusFirstItem() {
+  const firstItem = menuRef.value?.querySelector<HTMLButtonElement>(".context-item");
+  firstItem?.focus();
+}
+
+watch(
+  () => props.visible,
+  (visible) => {
+    if (visible) {
+      nextTick(focusFirstItem);
+    }
+  },
+);
 </script>
 
 <template>
   <div
     v-if="props.visible"
     class="context-backdrop"
+    aria-hidden="true"
     @mousedown="closeMenu"
     @contextmenu.prevent="closeMenu"
   />
   <section
+    ref="menuRef"
     v-if="props.visible && props.slot !== null"
     class="context-menu"
+    role="menu"
+    :aria-label="`Preset ${props.slot} options`"
+    tabindex="-1"
     :style="{ left: `${props.x}px`, top: `${props.y}px` }"
     @mousedown.stop
     @contextmenu.prevent
+    @keydown.escape.stop.prevent="closeMenu"
   >
     <div class="context-header">
       <span class="context-led" aria-hidden="true" />
@@ -56,12 +80,19 @@ function clearSlot() {
         :key="option.alias"
         type="button"
         class="context-item"
+        role="menuitem"
         @click="assign(option.alias)"
       >
         {{ option.title }}
       </button>
     </div>
-    <button v-if="props.hasAssignment" type="button" class="context-item context-item--danger" @click="clearSlot">
+    <button
+      v-if="props.hasAssignment"
+      type="button"
+      class="context-item context-item--danger"
+      role="menuitem"
+      @click="clearSlot"
+    >
       Clear Preset
     </button>
   </section>

@@ -19,6 +19,8 @@ defineEmits<{
       type="button"
       class="fx-segmented__button"
       :class="{ 'fx-segmented__button--active': modelValue === preset.id }"
+      :aria-label="`Set audio effect to ${preset.label}`"
+      :aria-pressed="modelValue === preset.id ? 'true' : 'false'"
       @click="$emit('update:modelValue', preset.id)"
     >
       <span class="fx-segmented__led" aria-hidden="true" />

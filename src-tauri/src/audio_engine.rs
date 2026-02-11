@@ -2,6 +2,8 @@ use minimp3::{Decoder, Error as Mp3Error};
 use rodio::buffer::SamplesBuffer;
 use rodio::{OutputStream, Sink};
 use serde::{Deserialize, Serialize};
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use souvlaki::{MediaControlEvent, MediaControls, MediaMetadata, MediaPlayback, PlatformConfig};
 use std::f32::consts::PI;
 use std::io::BufReader;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -9,10 +11,10 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-#[cfg(target_os = "macos")]
-use souvlaki::{MediaControlEvent, MediaControls, MediaMetadata, MediaPlayback, PlatformConfig};
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri::Emitter;
+#[cfg(target_os = "windows")]
+use tauri::Manager;
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -133,13 +135,7 @@ impl Biquad {
         Self::new_normalized(b0, b1, b2, a0, a1, a2, channels)
     }
 
-    fn peaking(
-        sample_rate: f32,
-        frequency_hz: f32,
-        q: f32,
-        gain_db: f32,
-        channels: usize,
-    ) -> Self {
+    fn peaking(sample_rate: f32, frequency_hz: f32, q: f32, gain_db: f32, channels: usize) -> Self {
         let frequency = frequency_hz.clamp(20.0, sample_rate * 0.45);
         let a = 10.0_f32.powf(gain_db / 40.0);
         let w0 = 2.0 * PI * frequency / sample_rate;
@@ -217,8 +213,9 @@ impl Warble {
     fn delay_samples(&self) -> f32 {
         let wow = (2.0 * PI * self.wow_rate_hz * self.phase).sin();
         let flutter = (2.0 * PI * self.flutter_rate_hz * self.phase + 0.7).sin();
-        let raw =
-            self.base_delay_samples + wow * self.wow_depth_samples + flutter * self.flutter_depth_samples;
+        let raw = self.base_delay_samples
+            + wow * self.wow_depth_samples
+            + flutter * self.flutter_depth_samples;
         let max_delay = (self.buffer[0].len().saturating_sub(3)) as f32;
         raw.clamp(1.0, max_delay.max(1.0))
     }
@@ -297,7 +294,10 @@ impl FxProcessor {
     fn configure(&mut self, sample_rate: u32, channels: usize, preset: AudioFxPreset) {
         let next_sample_rate = sample_rate.max(8_000);
         let next_channels = channels.max(1);
-        if self.sample_rate != next_sample_rate || self.channels != next_channels || self.preset != preset {
+        if self.sample_rate != next_sample_rate
+            || self.channels != next_channels
+            || self.preset != preset
+        {
             self.sample_rate = next_sample_rate;
             self.channels = next_channels;
             self.preset = preset;
@@ -421,7 +421,7 @@ pub struct PlaybackManager {
     worker: Option<PlaybackWorker>,
     preset: Arc<AtomicU8>,
     now_playing: Option<NowPlayingMetadata>,
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     media_controls: Option<MediaControls>,
 }
 
@@ -431,7 +431,7 @@ impl Default for PlaybackManager {
             worker: None,
             preset: Arc::new(AtomicU8::new(AudioFxPreset::Clean.as_u8())),
             now_playing: None,
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             media_controls: None,
         }
     }
@@ -439,12 +439,17 @@ impl Default for PlaybackManager {
 
 impl PlaybackManager {
     pub fn initialize_media_controls(&mut self, app: tauri::AppHandle) {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         {
+            #[cfg(target_os = "windows")]
+            let hwnd = get_main_window_hwnd(&app);
+            #[cfg(target_os = "macos")]
+            let hwnd = None;
+
             let mut controls = match MediaControls::new(PlatformConfig {
                 display_name: "Marconio",
                 dbus_name: "me.foureyes.marconio",
-                hwnd: None,
+                hwnd,
             }) {
                 Ok(controls) => controls,
                 Err(error) => {
@@ -474,7 +479,7 @@ impl PlaybackManager {
 
             self.media_controls = Some(controls);
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         let _ = app;
     }
 
@@ -515,7 +520,7 @@ impl PlaybackManager {
     }
 
     fn sync_media_metadata(&mut self) {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         if let Some(controls) = self.media_controls.as_mut() {
             let metadata = self.now_playing.as_ref();
             let payload = MediaMetadata {
@@ -532,7 +537,7 @@ impl PlaybackManager {
     }
 
     fn sync_media_playback_state(&mut self, is_playing: bool) {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         if let Some(controls) = self.media_controls.as_mut() {
             let playback = if is_playing {
                 MediaPlayback::Playing { progress: None }
@@ -546,7 +551,7 @@ impl PlaybackManager {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn map_media_control_action(event: MediaControlEvent) -> Option<&'static str> {
     match event {
         MediaControlEvent::Play => Some("play"),
@@ -554,6 +559,18 @@ fn map_media_control_action(event: MediaControlEvent) -> Option<&'static str> {
         MediaControlEvent::Toggle => Some("toggle"),
         MediaControlEvent::Stop => Some("stop"),
         _ => None,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn get_main_window_hwnd(app: &tauri::AppHandle) -> Option<*mut std::ffi::c_void> {
+    let window = app.get_webview_window("main")?;
+    match window.hwnd() {
+        Ok(hwnd) => Some(hwnd.0 as *mut std::ffi::c_void),
+        Err(error) => {
+            eprintln!("[audio] unable to resolve main window hwnd: {error}");
+            None
+        }
     }
 }
 
