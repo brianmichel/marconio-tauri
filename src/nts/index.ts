@@ -1,4 +1,5 @@
 export { createNTSClient, NTSRequestError } from "./client";
+export { calculateChannelRefreshDelay, syncChannelPlayableFromLive } from "./channelRefresh";
 export { playableFromChannel, playableFromMixtape } from "./playable";
 
 export type { NTSClient, NTSClientOptions, RequestOptions } from "./client";

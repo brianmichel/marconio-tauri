@@ -4,9 +4,11 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
+  calculateChannelRefreshDelay,
   createNTSClient,
   playableFromChannel,
   playableFromMixtape,
+  syncChannelPlayableFromLive,
   type MediaPlayable,
 } from "./nts";
 import LcdDisplay from "./components/receiver/LcdDisplay.vue";
@@ -128,6 +130,7 @@ const presetButtonRefs = ref<Record<number, HTMLButtonElement | null>>({});
 
 let controller: AbortController | null = null;
 let unlistenNativeMediaControl: (() => void) | null = null;
+let channelRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 function readAssignments(): PresetAssignments {
   const defaults: PresetAssignments = {
@@ -336,6 +339,7 @@ async function loadPlayableMedia() {
 
     mixtapes.value = mixtapeData.results.map(playableFromMixtape);
     normalizeAssignments();
+    currentPlayable.value = syncChannelPlayableFromLive(currentPlayable.value, channels.value);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       return;
@@ -346,6 +350,27 @@ async function loadPlayableMedia() {
   } finally {
     isLoading.value = false;
   }
+}
+
+function clearChannelRefreshTimer() {
+  if (channelRefreshTimer) {
+    clearTimeout(channelRefreshTimer);
+    channelRefreshTimer = null;
+  }
+}
+
+function scheduleChannelRefresh() {
+  clearChannelRefreshTimer();
+
+  if (!isPlaying.value || currentPlayable.value?.source.kind !== "channel") {
+    return;
+  }
+
+  const delay = calculateChannelRefreshDelay(currentPlayable.value.source.value);
+
+  channelRefreshTimer = setTimeout(() => {
+    void loadPlayableMedia();
+  }, delay);
 }
 
 async function startPlayback(playable: MediaPlayable, slot: number) {
@@ -599,6 +624,10 @@ onMounted(async () => {
   loadPlayableMedia();
 });
 
+watch([currentPlayable, isPlaying], () => {
+  scheduleChannelRefresh();
+});
+
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onGlobalKeyDown);
   window.removeEventListener("contextmenu", preventBrowserContextMenu);
@@ -618,6 +647,7 @@ onBeforeUnmount(() => {
     clearTimeout(lcdThemeAnimationTimer);
     lcdThemeAnimationTimer = null;
   }
+  clearChannelRefreshTimer();
 });
 
 function onGlobalKeyDown(event: KeyboardEvent) {
