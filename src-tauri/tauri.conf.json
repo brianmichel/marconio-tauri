@@ -21,6 +21,8 @@
         "maxHeight": 330,
         "resizable": false,
         "maximizable": false,
+        "minimizable": true,
+        "closable": true,
         "devtools": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true

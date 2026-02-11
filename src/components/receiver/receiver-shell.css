@@ -144,66 +144,6 @@
   cursor: grabbing;
 }
 
-.unit--windows .drag-strip {
-  right: 92px;
-}
-
-.window-controls {
-  position: absolute;
-  top: 0;
-  right: 0;
-  height: 28px;
-  display: flex;
-  align-items: stretch;
-  z-index: 24;
-}
-
-.window-control-btn {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 46px;
-  border: none;
-  border-left: 1px solid rgba(255, 255, 255, 0.06);
-  background: linear-gradient(180deg, rgba(72, 76, 84, 0.42) 0%, rgba(34, 38, 44, 0.26) 100%);
-  color: rgba(228, 232, 238, 0.84);
-  padding: 0;
-  cursor: pointer;
-  transition:
-    background 120ms ease,
-    color 120ms ease;
-}
-
-.window-control-btn:hover {
-  background: linear-gradient(180deg, rgba(98, 104, 112, 0.6) 0%, rgba(50, 55, 62, 0.44) 100%);
-  color: rgba(242, 245, 249, 0.94);
-}
-
-.window-control-btn:active {
-  background: linear-gradient(180deg, rgba(38, 42, 48, 0.7) 0%, rgba(28, 31, 36, 0.62) 100%);
-}
-
-.window-control-btn:focus-visible {
-  outline: 1px solid var(--theme-focus-outline);
-  outline-offset: -1px;
-}
-
-.window-control-btn--close:hover {
-  background: #cc3d3d;
-  color: #fff;
-}
-
-.window-control-btn--close:active {
-  background: #b92b2b;
-}
-
-.window-control-glyph {
-  display: block;
-  font-family: var(--display-font);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-}
-
 .unit-header {
   display: flex;
   align-items: center;

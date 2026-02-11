@@ -621,22 +621,6 @@ async function startWindowDrag() {
   }
 }
 
-async function minimizeWindow() {
-  try {
-    await getCurrentWindow().minimize();
-  } catch {
-    // Ignore window control errors outside Tauri.
-  }
-}
-
-async function closeWindow() {
-  try {
-    await getCurrentWindow().close();
-  } catch {
-    // Ignore window control errors outside Tauri.
-  }
-}
-
 onMounted(async () => {
   isWindows.value = detectWindowsPlatform();
 
@@ -762,26 +746,6 @@ function onGlobalKeyDown(event: KeyboardEvent) {
         role="presentation"
         @mousedown.left="startWindowDrag"
       />
-      <div v-if="isWindows" class="window-controls" role="toolbar" aria-label="Window controls">
-        <button
-          type="button"
-          class="window-control-btn"
-          aria-label="Minimize window"
-          @mousedown.stop
-          @click.stop="minimizeWindow"
-        >
-          <span class="window-control-glyph" aria-hidden="true">-</span>
-        </button>
-        <button
-          type="button"
-          class="window-control-btn window-control-btn--close"
-          aria-label="Close window"
-          @mousedown.stop
-          @click.stop="closeWindow"
-        >
-          <span class="window-control-glyph" aria-hidden="true">X</span>
-        </button>
-      </div>
       <header class="unit-header" data-tauri-drag-region>
         <div class="model-wrap">
           <button
