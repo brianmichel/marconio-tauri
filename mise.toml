@@ -1,7 +1,6 @@
 [tools]
 deno = "2"
 rust = "stable"
-"cargo:tauri-cli" = "2"
 
 [tasks.setup]
 description = "Install JS dependencies using deno.lock"
