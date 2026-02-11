@@ -1,0 +1,32 @@
+[tools]
+deno = "2"
+rust = "stable"
+
+[tasks.setup]
+description = "Install JS dependencies using deno.lock"
+run = "deno install --frozen"
+
+[tasks.dev]
+description = "Start Tauri in development mode"
+run = "deno task tauri dev"
+
+[tasks.test]
+description = "Run frontend unit tests"
+run = "deno task test"
+
+[tasks.build]
+description = "Build frontend and Tauri app without bundling"
+run = "deno task tauri build --no-bundle"
+
+[tasks.bundle]
+description = "Build distributable Tauri bundles"
+run = "deno task tauri build"
+
+[tasks.doctor]
+description = "Print toolchain versions and Tauri diagnostics"
+run = """
+deno --version
+rustc --version
+cargo --version
+deno task tauri info
+"""
