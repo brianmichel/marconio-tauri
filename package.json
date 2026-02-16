@@ -8,7 +8,9 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "bundle:ci:development": "tauri build --config src-tauri/tauri.ci-development.conf.json",
+    "bundle:ci:distribution": "tauri build --config src-tauri/tauri.ci-distribution.conf.json"
   },
   "dependencies": {
     "vue": "^3.5.13",

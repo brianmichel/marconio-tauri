@@ -8,7 +8,7 @@ run = "deno install --frozen"
 
 [tasks.dev]
 description = "Start Tauri in development mode"
-run = "deno task tauri dev"
+run = "env -u RUSTUP_TOOLCHAIN PATH=\"/opt/homebrew/bin:$PATH\" deno task tauri dev --config src-tauri/tauri.ci-development.conf.json"
 
 [tasks.test]
 description = "Run frontend unit tests"
@@ -16,11 +16,19 @@ run = "deno task test"
 
 [tasks.build]
 description = "Build frontend and Tauri app without bundling"
-run = "deno task tauri build --no-bundle"
+run = "env -u RUSTUP_TOOLCHAIN PATH=\"/opt/homebrew/bin:$PATH\" deno task tauri build --no-bundle --config src-tauri/tauri.ci-development.conf.json"
 
 [tasks.bundle]
 description = "Build distributable Tauri bundles"
-run = "deno task tauri build"
+run = "env -u RUSTUP_TOOLCHAIN PATH=\"/opt/homebrew/bin:$PATH\" deno task tauri build --config src-tauri/tauri.ci-development.conf.json"
+
+[tasks.bundle_ci_development]
+description = "Build bundle using CI development provisioning profile overlay"
+run = "env -u RUSTUP_TOOLCHAIN PATH=\"/opt/homebrew/bin:$PATH\" deno task bundle:ci:development"
+
+[tasks.bundle_ci_distribution]
+description = "Build bundle using CI distribution provisioning profile overlay"
+run = "env -u RUSTUP_TOOLCHAIN PATH=\"/opt/homebrew/bin:$PATH\" deno task bundle:ci:distribution"
 
 [tasks.doctor]
 description = "Print toolchain versions and Tauri diagnostics"

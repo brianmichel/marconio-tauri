@@ -31,11 +31,14 @@ Your preset assignments, display theme, and FX choice are remembered between ses
 - **Linux** — haven't tried it at all, in theory it might work.
 - **No volume knob** — volume is whatever your system volume is. In-app control isn't implemented yet.
 - **Toolchain quirks on macOS** — if you're building from source and hit a `libclang` architecture mismatch error, it's a Rust/Xcode toolchain issue, not a Marconio bug.
+  - `mise` tasks force `/opt/homebrew/bin` and unset `RUSTUP_TOOLCHAIN` so local Tauri builds use arm64 Homebrew Rust tools by default.
 - **Shazam feature availability** — song recognition requires macOS 12+ and an app signing profile with the ShazamKit capability enabled.
 
 ## Building from source
 
 You'll need Rust (stable), Deno 2.x, and the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your platform. Tool versions are pinned in `mise.toml` if you use [mise](https://mise.jdx.dev).
+
+For macOS development builds, this repo uses `src-tauri/tauri.ci-development.conf.json` by default in the `mise` development tasks. Make sure `provisioning/ci-development-marconio.provisionprofile` is present locally.
 
 ```bash
 # install dependencies
@@ -44,11 +47,19 @@ mise install && mise run setup
 
 # run in development
 mise run dev
-# or: npm run tauri dev
+# or: npm run tauri -- dev --config src-tauri/tauri.ci-development.conf.json
 
 # run tests
 mise run test
 # or: npm test
+
+# build with CI development profile overlay (macOS)
+mise run bundle_ci_development
+# or: npm run bundle:ci:development
+
+# build with CI distribution profile overlay (macOS)
+mise run bundle_ci_distribution
+# or: npm run bundle:ci:distribution
 
 # build distributable
 mise run bundle

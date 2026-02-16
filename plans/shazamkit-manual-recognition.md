@@ -49,6 +49,10 @@ Scope: macOS manual song recognition for currently playing stream, persistent hi
 - 2026-02-16: Frontend test suite (`vitest`) and `vue-tsc --noEmit` passed.
 - 2026-02-16: Rust verification blocked by local toolchain mismatch (`libclang` arch) and missing `rustfmt`.
 - 2026-02-16: Updated README with song recognition usage and requirements.
+- 2026-02-16: Added CI signing overlays for development/distribution provisioning profiles and wired release workflow to distribution overlay.
+- 2026-02-16: Updated default Tauri script so local development workflows also use development provisioning overlay.
+- 2026-02-16: Corrected dev command wiring so `mise run dev` passes `--config` to `tauri dev` in valid argument order.
+- 2026-02-16: Hardened `mise` tasks to prefer `/opt/homebrew/bin` and unset `RUSTUP_TOOLCHAIN` to avoid x86 rustup proxy/libclang mismatch during local Tauri builds.
 
 ## Change Protocol
 - I will update this file whenever:
