@@ -74,7 +74,7 @@ struct ShazamInner {
 impl ShazamManager {
     pub fn new(app: AppHandle) -> Result<Self, String> {
         let history_path = resolve_history_path(&app)?;
-        let history = load_history(history_path.as_path())?;
+        let history = load_history_or_empty(history_path.as_path());
         let inner = Arc::new(ShazamInner {
             app,
             history_path,
@@ -114,8 +114,7 @@ impl ShazamManager {
             .history
             .lock()
             .map_err(|_| "Shazam history state lock poisoned".to_string())?;
-        history.clear();
-        persist_history(self.inner.history_path.as_path(), history.as_slice())?;
+        clear_history_with_persist(self.inner.history_path.as_path(), &mut history)?;
         drop(history);
         self.inner.emit_history();
         Ok(())
@@ -394,6 +393,13 @@ fn load_history(path: &Path) -> Result<Vec<RecognizedTrack>, String> {
     })
 }
 
+fn load_history_or_empty(path: &Path) -> Vec<RecognizedTrack> {
+    load_history(path).unwrap_or_else(|error| {
+        eprintln!("[shazam] unable to load history, starting empty: {error}");
+        Vec::new()
+    })
+}
+
 fn persist_history(path: &Path, history: &[RecognizedTrack]) -> Result<(), String> {
     let parent = path.parent().ok_or_else(|| {
         format!(
@@ -418,11 +424,115 @@ fn persist_history(path: &Path, history: &[RecognizedTrack]) -> Result<(), Strin
     })
 }
 
+fn clear_history_with_persist(path: &Path, history: &mut Vec<RecognizedTrack>) -> Result<(), String> {
+    persist_history(path, &[])?;
+    history.clear();
+    Ok(())
+}
+
 fn epoch_seconds() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|value| value.as_secs())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        clear_history_with_persist, load_history_or_empty, persist_history, RecognizedTrack,
+    };
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn test_dir(name: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|value| value.as_nanos())
+            .unwrap_or(0);
+        path.push(format!(
+            "marconio-shazam-tests-{}-{}-{}",
+            name,
+            std::process::id(),
+            nanos
+        ));
+        fs::create_dir_all(path.as_path()).expect("failed to create test directory");
+        path
+    }
+
+    fn sample_track() -> RecognizedTrack {
+        RecognizedTrack {
+            shazam_id: Some("123".to_string()),
+            title: "Track".to_string(),
+            artist: Some("Artist".to_string()),
+            artwork_url: None,
+            apple_music_url: None,
+            web_url: None,
+            recognized_at: 1,
+            source_title: Some("Source".to_string()),
+            source_artist: Some("Source Artist".to_string()),
+        }
+    }
+
+    #[test]
+    fn load_history_or_empty_returns_empty_for_invalid_json() {
+        let dir = test_dir("invalid-json");
+        let history_path = dir.join("history.json");
+        fs::write(history_path.as_path(), "{ invalid json")
+            .expect("failed to write invalid history file");
+
+        let history = load_history_or_empty(history_path.as_path());
+        assert!(history.is_empty());
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn clear_history_does_not_mutate_memory_when_persist_fails() {
+        let dir = test_dir("clear-fail");
+        let blocking_parent = dir.join("not-a-directory");
+        fs::write(blocking_parent.as_path(), "block").expect("failed to create blocking file");
+        let history_path = blocking_parent.join("history.json");
+
+        let mut history = vec![sample_track()];
+        let result = clear_history_with_persist(history_path.as_path(), &mut history);
+        assert!(result.is_err());
+        assert_eq!(history.len(), 1);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn clear_history_persists_empty_and_clears_memory_on_success() {
+        let dir = test_dir("clear-success");
+        let history_path = dir.join("history.json");
+
+        let mut history = vec![sample_track()];
+        clear_history_with_persist(history_path.as_path(), &mut history)
+            .expect("expected clear to succeed");
+        assert!(history.is_empty());
+
+        let persisted = load_history_or_empty(history_path.as_path());
+        assert!(persisted.is_empty());
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn persist_history_round_trip_succeeds() {
+        let dir = test_dir("persist-roundtrip");
+        let history_path = dir.join("history.json");
+        let history = vec![sample_track()];
+        persist_history(history_path.as_path(), history.as_slice()).expect("persist should succeed");
+
+        let loaded = load_history_or_empty(history_path.as_path());
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].title, "Track");
+
+        let _ = fs::remove_dir_all(dir);
+    }
 }
 
 #[cfg(target_os = "macos")]
