@@ -63,6 +63,7 @@ Scope: macOS manual song recognition for currently playing stream, persistent hi
 - 2026-02-16: Verified Rust with Homebrew/arm64 environment (`env -u RUSTUP_TOOLCHAIN PATH="/opt/homebrew/bin:$PATH"`): `cargo check` and `cargo test --lib shazam` pass.
 - 2026-02-16: Re-ran frontend verification; `npm run test` and `npm run build` pass.
 - 2026-02-16: Attempted signed debug bundle build (`npm run dev:signed:build`); blocked by missing local `Apple Development` signing identity.
+- 2026-02-16: Hardened release workflow to fail fast when macOS signing/notary secrets are missing and restricted macOS release bundle to DMG (`--bundles dmg`).
 
 ## Change Protocol
 - I will update this file whenever:
