@@ -58,6 +58,22 @@ static const char *optional_cstring(NSString *value) {
 
 - (BOOL)startWithError:(NSError **)error {
   if (@available(macOS 12.0, *)) {
+    NSString *bundleIdentifier = NSBundle.mainBundle.bundleIdentifier;
+    if (bundleIdentifier.length == 0) {
+      if (error != NULL) {
+        *error = [NSError
+            errorWithDomain:@"Marconio.Shazam"
+                       code:6
+                   userInfo:@{
+                     NSLocalizedDescriptionKey :
+                         @"ShazamKit requires launching from an app bundle "
+                         @"with a valid CFBundleIdentifier. Run the signed "
+                         @"bundle workflow instead of `tauri dev`."
+                   }];
+      }
+      return NO;
+    }
+
     @synchronized(self) {
       [self stop];
       self.session = [[SHSession alloc] init];
@@ -223,8 +239,13 @@ static const char *optional_cstring(NSString *value) {
   }
 
   if (error != nil) {
+    NSString *message = error.localizedDescription ?: @"ShazamKit request failed.";
+    NSString *detailed =
+        [NSString stringWithFormat:@"%@ [%@:%ld]", message,
+                                   error.domain ?: @"UnknownDomain",
+                                   (long)error.code];
     self.callback(SHAZAM_BRIDGE_EVENT_ERROR, NULL, NULL, NULL, NULL, NULL,
-                  optional_cstring(error.localizedDescription), self.userData);
+                  optional_cstring(detailed), self.userData);
   } else {
     self.callback(SHAZAM_BRIDGE_EVENT_NO_MATCH, NULL, NULL, NULL, NULL, NULL,
                   NULL, self.userData);

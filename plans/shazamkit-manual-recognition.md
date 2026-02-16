@@ -28,14 +28,14 @@ Scope: macOS manual song recognition for currently playing stream, persistent hi
 | T6 | Add top-window "magic find" button UI and control states | DONE | Added controls in `App.vue` + styles in `receiver-shell.css` |
 | T7 | Add reusable in-app recognized tracks panel component | DONE | Added `RecognizedTracksPanel.vue` and integrated with events/commands |
 | T8 | Add reusable toast component for success/failure feedback | DONE | Added `ToastStack.vue` and hooked to result events |
-| T9 | Update macOS minimum version to 12.0 and signing/capability config | IN_PROGRESS | `minimumSystemVersion` updated; Apple capability/profile still external |
+| T9 | Update macOS minimum version to 12.0 and signing/capability config | IN_PROGRESS | `minimumSystemVersion` + signed local dev task + overlay signing identities added; waiting runtime verification on signed app |
 | T10 | Add tests and manual QA checklist for success/no-match/error paths | IN_PROGRESS | frontend tests/typecheck passed; Rust compile checks blocked by local toolchain |
 | T11 | Documentation updates (`README.md`) | DONE | added manual recognition usage and platform/capability note |
 
 ## Blockers / Inputs Needed
 - Apple Developer configuration confirmation:
   - App ID capability enabled for ShazamKit.
-  - Signing identity/profile includes required capability.
+  - Signing identity/profile setup is valid and available in local keychain (`Apple Development`) and CI (`Developer ID Application`).
 - Local Rust toolchain alignment:
   - `cargo check` currently blocked by `libclang` architecture mismatch (`stable-x86_64-apple-darwin` loading arm64 libclang).
   - `cargo fmt` unavailable because `rustfmt` is not installed for current toolchain.
@@ -53,6 +53,12 @@ Scope: macOS manual song recognition for currently playing stream, persistent hi
 - 2026-02-16: Updated default Tauri script so local development workflows also use development provisioning overlay.
 - 2026-02-16: Corrected dev command wiring so `mise run dev` passes `--config` to `tauri dev` in valid argument order.
 - 2026-02-16: Hardened `mise` tasks to prefer `/opt/homebrew/bin` and unset `RUSTUP_TOOLCHAIN` to avoid x86 rustup proxy/libclang mismatch during local Tauri builds.
+- 2026-02-16: Added `mise run dev_signed` to build and launch a signed debug app bundle for App Service-dependent ShazamKit testing.
+- 2026-02-16: Improved Shazam bridge error payload to include NSError domain/code for faster diagnosis of `SHError` cases (e.g. 202).
+- 2026-02-16: Fixed Tauri macOS overlay file mapping so provisioning profiles are embedded at `Contents/embedded.provisionprofile`.
+- 2026-02-16: Removed explicit ShazamKit entitlements plist path and moved to App Service + signing/bundle identity debugging.
+- 2026-02-16: Updated signing identity overlays: development=`Apple Development`, distribution=`Developer ID Application`.
+- 2026-02-16: Added runtime guard in native Shazam bridge to fail early when app is not launched from a valid bundle identifier (avoids opaque 202s in ad-hoc `tauri dev` runs).
 
 ## Change Protocol
 - I will update this file whenever:

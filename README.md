@@ -33,6 +33,7 @@ Your preset assignments, display theme, and FX choice are remembered between ses
 - **Toolchain quirks on macOS** — if you're building from source and hit a `libclang` architecture mismatch error, it's a Rust/Xcode toolchain issue, not a Marconio bug.
   - `mise` tasks force `/opt/homebrew/bin` and unset `RUSTUP_TOOLCHAIN` so local Tauri builds use arm64 Homebrew Rust tools by default.
 - **Shazam feature availability** — song recognition requires macOS 12+ and an app signing profile with the ShazamKit capability enabled.
+  - For local debugging of ShazamKit specifically, prefer `mise run dev_signed` (signed app bundle). `mise run dev` uses `tauri dev`, which runs an ad-hoc binary and may fail App Service checks.
 
 ## Building from source
 
@@ -48,6 +49,9 @@ mise install && mise run setup
 # run in development
 mise run dev
 # or: npm run tauri -- dev --config src-tauri/tauri.ci-development.conf.json
+
+# run a signed debug app bundle (recommended when testing ShazamKit)
+mise run dev_signed
 
 # run tests
 mise run test

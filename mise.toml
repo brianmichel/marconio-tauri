@@ -10,6 +10,13 @@ run = "deno install --frozen"
 description = "Start Tauri in development mode"
 run = "env -u RUSTUP_TOOLCHAIN PATH=\"/opt/homebrew/bin:$PATH\" deno task tauri dev --config src-tauri/tauri.ci-development.conf.json"
 
+[tasks.dev_signed]
+description = "Build and launch a signed debug macOS app bundle (for App Service-dependent features like ShazamKit)"
+run = """
+env -u RUSTUP_TOOLCHAIN PATH="/opt/homebrew/bin:$PATH" deno task tauri build --debug --bundles app --ci --config src-tauri/tauri.ci-development.conf.json
+open src-tauri/target/debug/bundle/macos/Marconio.app
+"""
+
 [tasks.test]
 description = "Run frontend unit tests"
 run = "deno task test"
