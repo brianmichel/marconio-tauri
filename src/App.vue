@@ -3,16 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import {
-  createNTSClient,
-  playableFromChannel,
-  playableFromMixtape,
-  type MediaPlayable,
-} from "./nts";
-import {
-  calculateChannelRefreshDelay,
-  syncChannelPlayableFromLive,
-} from "./nts/channelRefresh";
+import { type MediaPlayable } from "./nts";
 import LcdDisplay from "./components/receiver/LcdDisplay.vue";
 import PresetGrid from "./components/receiver/PresetGrid.vue";
 import PresetContextMenu from "./components/receiver/PresetContextMenu.vue";
@@ -23,30 +14,22 @@ import ReceiverModelMenu from "./components/receiver/ReceiverModelMenu.vue";
 import { AUDIO_FX_PRESETS, type AudioFxPreset } from "./audio/fxPresets";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useGlobalReceiverHotkeys } from "./composables/useGlobalReceiverHotkeys";
+import { useNativePlayback } from "./composables/useNativePlayback";
+import { usePlayableCatalog } from "./composables/usePlayableCatalog";
 
-const client = createNTSClient();
 const STORAGE_KEY = "nts-user-presets-v1";
 const LCD_THEME_KEY = "lcd-theme-v1";
 const AUDIO_FX_KEY = "audio-fx-preset-v2";
 const MENU_BAR_ONLY_KEY = "menu-bar-only-v1";
-const USER_SLOTS = [3, 4, 5, 6] as const;
 const LCD_THEMES = ["amber", "blue", "green", "purpleRed"] as const;
 
-type UserSlot = (typeof USER_SLOTS)[number];
+type UserSlot = 3 | 4 | 5 | 6;
 type PresetAssignments = Record<UserSlot, string | null>;
 type LcdTheme = (typeof LCD_THEMES)[number];
-type NativeMediaControlAction = "play" | "pause" | "stop" | "toggle";
-type NativeMediaControlPayload = {
-  action: NativeMediaControlAction;
-};
 
-const channels = ref<MediaPlayable[]>([]);
-const mixtapes = ref<MediaPlayable[]>([]);
-const isLoading = ref(false);
 const errorMessage = ref<string | null>(null);
 const currentPlayable = ref<MediaPlayable | null>(null);
 const activeSlot = ref<number | null>(null);
-const isPlaying = ref(false);
 const isLcdThemeAnimating = ref(false);
 let lcdThemeAnimationTimer: ReturnType<typeof setTimeout> | null = null;
 const isLcdTuning = ref(false);
@@ -115,19 +98,6 @@ function detectWindowsPlatform() {
   return /windows|win32|win64|wow64/i.test(probe);
 }
 
-function nowPlayingFromPlayable(playable: MediaPlayable) {
-  const album = playable.source.kind === "channel"
-    ? `NTS ${playable.source.value.channelName}`
-    : "NTS Mixtape";
-
-  return {
-    title: playable.title,
-    artist: playable.subtitle ?? "NTS Radio",
-    album,
-    artworkUrl: playable.artworkUrl,
-  };
-}
-
 function cycleLcdTheme() {
   const currentIndex = LCD_THEMES.indexOf(lcdTheme.value);
   lcdTheme.value = LCD_THEMES[(currentIndex + 1) % LCD_THEMES.length];
@@ -156,10 +126,7 @@ const contextMenu = ref<{
 });
 const presetButtonRefs = ref<Record<number, HTMLButtonElement | null>>({});
 
-let controller: AbortController | null = null;
-let unlistenNativeMediaControl: (() => void) | null = null;
 let unlistenTrayOpenSettings: (() => void) | null = null;
-let channelRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 function readAssignments(): PresetAssignments {
   const defaults: PresetAssignments = {
@@ -196,6 +163,21 @@ let settingsTriggerEl: HTMLElement | null = null;
 const isMacPlatform = ref(detectMacPlatform());
 const isWindowsPlatform = ref(detectWindowsPlatform());
 const isTrayModeSupported = computed(() => isMacPlatform.value || isWindowsPlatform.value);
+const { isPlaying, startPlayback, stopPlayback } = useNativePlayback({
+  canUseTauriInvoke,
+  currentPlayable,
+  activeSlot,
+  errorMessage,
+  isLcdTuning,
+});
+const { channels, mixtapes, mixtapeByAlias, isLoading, loadPlayableMedia } = usePlayableCatalog({
+  assignments,
+  currentPlayable,
+  isPlaying,
+  errorMessage,
+  getOpenContextSlot: () => contextMenu.value.slot,
+  closeContextMenu,
+});
 
 watch(
   assignments,
@@ -283,16 +265,6 @@ const channelTwo = computed(
     ) ?? null,
 );
 
-const mixtapeByAlias = computed(() => {
-  const map = new Map<string, MediaPlayable>();
-  for (const item of mixtapes.value) {
-    if (item.source.kind === "mixtape") {
-      map.set(item.source.value.mixtapeAlias, item);
-    }
-  }
-  return map;
-});
-
 const mixtapeOptions = computed(() =>
   mixtapes.value
     .filter(
@@ -379,143 +351,6 @@ const contextMenuHasAssignment = computed(() => {
 
   return Boolean(assignments.value[slot]);
 });
-
-function normalizeAssignments() {
-  let changed = false;
-
-  for (const slot of USER_SLOTS) {
-    const alias = assignments.value[slot];
-    if (alias && !mixtapeByAlias.value.has(alias)) {
-      assignments.value[slot] = null;
-      changed = true;
-    }
-  }
-
-  if (changed && contextMenu.value.slot && !assignments.value[contextMenu.value.slot]) {
-    closeContextMenu();
-  }
-}
-
-async function loadPlayableMedia() {
-  controller?.abort();
-  controller = new AbortController();
-
-  isLoading.value = true;
-  errorMessage.value = null;
-
-  try {
-    const [live, mixtapeData] = await Promise.all([
-      client.live({ signal: controller.signal }),
-      client.mixtapes({ signal: controller.signal }),
-    ]);
-
-    channels.value = live.results
-      .map(playableFromChannel)
-      .filter((item): item is MediaPlayable => item !== null);
-
-    mixtapes.value = mixtapeData.results.map(playableFromMixtape);
-    normalizeAssignments();
-    currentPlayable.value = syncChannelPlayableFromLive(currentPlayable.value, channels.value);
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      return;
-    }
-
-    const message = error instanceof Error ? error.message : "Unknown error";
-    errorMessage.value = `Failed to load NTS streams: ${message}`;
-  } finally {
-    isLoading.value = false;
-  }
-}
-
-function clearChannelRefreshTimer() {
-  if (channelRefreshTimer) {
-    clearTimeout(channelRefreshTimer);
-    channelRefreshTimer = null;
-  }
-}
-
-function scheduleChannelRefresh() {
-  clearChannelRefreshTimer();
-
-  if (!isPlaying.value || currentPlayable.value?.source.kind !== "channel") {
-    return;
-  }
-
-  const delay = calculateChannelRefreshDelay(currentPlayable.value.source.value);
-
-  channelRefreshTimer = setTimeout(() => {
-    void loadPlayableMedia();
-  }, delay);
-}
-
-async function startPlayback(playable: MediaPlayable, slot: number) {
-  isLcdTuning.value = true;
-  setTimeout(() => { isLcdTuning.value = false; }, 400);
-  currentPlayable.value = playable;
-  activeSlot.value = slot;
-  errorMessage.value = null;
-
-  if (!canUseTauriInvoke()) {
-    errorMessage.value = "Native playback requires a Tauri runtime.";
-    return;
-  }
-
-  try {
-    await invoke("start_native_stream", {
-      streamUrl: playable.streamUrl,
-      nowPlaying: nowPlayingFromPlayable(playable),
-    });
-    isPlaying.value = true;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    errorMessage.value = `Unable to start playback: ${message}`;
-    isPlaying.value = false;
-  }
-}
-
-async function stopPlayback() {
-  if (!canUseTauriInvoke()) {
-    isPlaying.value = false;
-    return;
-  }
-
-  try {
-    await invoke("stop_native_stream");
-  } catch (error) {
-    console.warn("[audio] Unable to stop native playback", error);
-  } finally {
-    isPlaying.value = false;
-  }
-}
-
-async function handleNativeMediaControl(action: NativeMediaControlAction) {
-  if (action === "pause" || action === "stop") {
-    if (isPlaying.value) {
-      await stopPlayback();
-    }
-    return;
-  }
-
-  if (!currentPlayable.value || activeSlot.value === null) {
-    return;
-  }
-
-  if (action === "play") {
-    if (!isPlaying.value) {
-      await startPlayback(currentPlayable.value, activeSlot.value);
-    }
-    return;
-  }
-
-  if (action === "toggle") {
-    if (isPlaying.value) {
-      await stopPlayback();
-      return;
-    }
-    await startPlayback(currentPlayable.value, activeSlot.value);
-  }
-}
 
 const modelMenuVisible = ref(false);
 
@@ -709,17 +544,6 @@ onMounted(async () => {
     }
 
     try {
-      unlistenNativeMediaControl = await listen<NativeMediaControlPayload>(
-        "native-media-control",
-        (event) => {
-          void handleNativeMediaControl(event.payload.action);
-        },
-      );
-    } catch (error) {
-      console.warn("[audio] Unable to listen for native media controls", error);
-    }
-
-    try {
       unlistenTrayOpenSettings = await listen("tray-open-settings", () => {
         openSettingsPanel();
       });
@@ -731,21 +555,7 @@ onMounted(async () => {
   loadPlayableMedia();
 });
 
-watch([currentPlayable, isPlaying], () => {
-  scheduleChannelRefresh();
-});
-
 onBeforeUnmount(() => {
-  controller?.abort();
-  if (canUseTauriInvoke()) {
-    void invoke("stop_native_stream").catch(() => {
-      // Ignore cleanup errors.
-    });
-  }
-  if (unlistenNativeMediaControl) {
-    unlistenNativeMediaControl();
-    unlistenNativeMediaControl = null;
-  }
   if (unlistenTrayOpenSettings) {
     unlistenTrayOpenSettings();
     unlistenTrayOpenSettings = null;
@@ -754,7 +564,6 @@ onBeforeUnmount(() => {
     clearTimeout(lcdThemeAnimationTimer);
     lcdThemeAnimationTimer = null;
   }
-  clearChannelRefreshTimer();
 });
 </script>
 
