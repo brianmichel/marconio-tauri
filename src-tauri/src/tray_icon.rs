@@ -1,7 +1,13 @@
+use std::sync::OnceLock;
+
 const SIZE: u32 = 44;
 const GLYPH_W: usize = 5;
 const GLYPH_H: usize = 7;
 const SCALE: usize = 3;
+type IconRgba = (Vec<u8>, u32, u32);
+
+static IDLE_ICON: OnceLock<IconRgba> = OnceLock::new();
+static PRESET_ICONS: OnceLock<[IconRgba; 6]> = OnceLock::new();
 
 /// 5-wide, 7-tall bitmap glyphs for digits 1–6.
 /// Each byte's low 5 bits encode pixel columns left-to-right.
@@ -95,6 +101,11 @@ pub fn render_idle_icon() -> (Vec<u8>, u32, u32) {
     (rgba, SIZE, SIZE)
 }
 
+/// Returns a cached idle icon bitmap.
+pub fn cached_idle_icon() -> &'static IconRgba {
+    IDLE_ICON.get_or_init(render_idle_icon)
+}
+
 /// Render a 44x44 RGBA tray icon displaying the given preset number (1–6).
 ///
 /// Returns `(rgba_bytes, width, height)`.
@@ -129,6 +140,22 @@ pub fn render_preset_icon(preset: u8) -> (Vec<u8>, u32, u32) {
     }
 
     (rgba, SIZE, SIZE)
+}
+
+/// Returns a cached preset icon bitmap.
+pub fn cached_preset_icon(preset: u8) -> &'static IconRgba {
+    let digit_idx = (preset.saturating_sub(1) as usize).min(5);
+    let icons = PRESET_ICONS.get_or_init(|| {
+        [
+            render_preset_icon(1),
+            render_preset_icon(2),
+            render_preset_icon(3),
+            render_preset_icon(4),
+            render_preset_icon(5),
+            render_preset_icon(6),
+        ]
+    });
+    &icons[digit_idx]
 }
 
 /// Returns the foreground color for the tray icon.

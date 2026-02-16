@@ -189,18 +189,12 @@ fn set_tray_preset(slot: Option<u8>, app: tauri::AppHandle) -> Result<(), String
         return Ok(());
     };
 
-    match slot {
-        Some(n) => {
-            let (rgba, w, h) = tray_icon::render_preset_icon(n);
-            let icon = tauri::image::Image::new_owned(rgba, w, h);
-            tray.set_icon(Some(icon)).map_err(|e| e.to_string())?;
-        }
-        None => {
-            let (rgba, w, h) = tray_icon::render_idle_icon();
-            let icon = tauri::image::Image::new_owned(rgba, w, h);
-            tray.set_icon(Some(icon)).map_err(|e| e.to_string())?;
-        }
-    }
+    let (rgba, w, h) = match slot {
+        Some(n) => tray_icon::cached_preset_icon(n),
+        None => tray_icon::cached_idle_icon(),
+    };
+    let icon = tauri::image::Image::new(rgba.as_slice(), *w, *h);
+    tray.set_icon(Some(icon)).map_err(|e| e.to_string())?;
 
     #[cfg(target_os = "macos")]
     {

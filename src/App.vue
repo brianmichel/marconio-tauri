@@ -672,7 +672,7 @@ function clearContextMenuSlot() {
   clearUserSlot(slot);
 }
 
-function onPresetPress(slot: number) {
+function activatePresetSlot(slot: number) {
   const card = presetCards.value.find((item) => item.slot === slot);
   if (!card) {
     return;
@@ -686,6 +686,10 @@ function onPresetPress(slot: number) {
   if (!card.locked && slot >= 3 && slot <= 6) {
     openContextMenuForSlot(slot as UserSlot);
   }
+}
+
+function onPresetPress(slot: number) {
+  activatePresetSlot(slot);
 }
 
 function onPresetContextMenu(event: MouseEvent, slot: number, locked: boolean) {
@@ -705,19 +709,7 @@ function onPresetContextMenuByKeyboard(slot: number) {
 }
 
 function onPresetHotkey(slot: number) {
-  const card = presetCards.value.find((item) => item.slot === slot);
-  if (!card) {
-    return;
-  }
-
-  if (card.playable) {
-    void startPlayback(card.playable, slot);
-    return;
-  }
-
-  if (!card.locked && slot >= 3 && slot <= 6) {
-    openContextMenuForSlot(slot as UserSlot);
-  }
+  activatePresetSlot(slot);
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
