@@ -112,7 +112,7 @@ function formatTimestamp(epochSeconds: number) {
 
 .recognized-panel {
   position: absolute;
-  inset: 20px 14px 16px;
+  inset: 34px 14px 16px;
   z-index: 160;
   border: 1px solid #3a4046;
   border-radius: 7px;

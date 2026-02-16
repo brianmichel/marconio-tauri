@@ -579,32 +579,29 @@ onBeforeUnmount(() => {
           @history="openRecognizedPanel"
           @stop="stopPlayback(); closeModelMenu()"
         />
-        <div
+        <button
           v-if="isShazamAvailable"
-          class="shazam-identify-wrap"
-          :class="{ 'shazam-identify-wrap--active': isShazamListening }"
+          type="button"
+          class="shazam-identify-btn"
+          :class="{ 'shazam-identify-btn--active': isShazamListening }"
+          :disabled="isShazamListening || !isPlaying"
+          :aria-busy="isShazamListening ? 'true' : 'false'"
+          :title="isPlaying ? 'Identify the current song' : 'Start playback to identify songs'"
           @mousedown.stop
+          @click.stop="identifySongNow"
         >
-          <button
-            type="button"
-            class="shazam-identify-btn"
-            :disabled="isShazamListening || !isPlaying"
-            :aria-busy="isShazamListening ? 'true' : 'false'"
-            :title="isPlaying ? 'Identify the current song' : 'Start playback to identify songs'"
-            @click.stop="identifySongNow"
-          >
-            <span class="viewfinder-icon" aria-hidden="true">
-              <span class="vf-corner vf-corner--tl" />
-              <span class="vf-corner vf-corner--tr" />
-              <span class="vf-corner vf-corner--bl" />
-              <span class="vf-corner vf-corner--br" />
-              <span class="vf-notes">
-                <span class="vf-note">&#9834;</span>
-                <span class="vf-note">&#9835;</span>
-              </span>
+          <span class="viewfinder-icon" aria-hidden="true">
+            <span class="vf-corner vf-corner--tl" />
+            <span class="vf-corner vf-corner--tr" />
+            <span class="vf-corner vf-corner--bl" />
+            <span class="vf-corner vf-corner--br" />
+            <span class="vf-bars">
+              <span class="vf-bar" />
+              <span class="vf-bar" />
+              <span class="vf-bar" />
             </span>
-          </button>
-        </div>
+          </span>
+        </button>
       </header>
 
       <LcdDisplay
