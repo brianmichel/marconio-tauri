@@ -5,7 +5,7 @@ mod tray_icon;
 use crate::audio_engine::{AudioFxPreset, NowPlayingMetadata, PlaybackManager};
 use serde_json::Value;
 use std::sync::Mutex;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
@@ -16,6 +16,12 @@ use tauri::ActivationPolicy;
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 const TRAY_ID: &str = "main";
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+const TRAY_MENU_NOW_PLAYING_TITLE_ID: &str = "tray.now-playing-title";
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+const TRAY_MENU_NOW_PLAYING_SUBTITLE_ID: &str = "tray.now-playing-subtitle";
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+const TRAY_MENU_SETTINGS_ID: &str = "tray.settings";
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 const TRAY_MENU_OPEN_ID: &str = "tray.open";
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -211,19 +217,84 @@ fn set_tray_preset(_slot: Option<u8>) -> Result<(), String> {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn setup_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
+fn build_tray_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    title: Option<&str>,
+    subtitle: Option<&str>,
+) -> Result<tauri::menu::Menu<R>, String> {
+    let title_text = match title {
+        Some(t) => t.to_string(),
+        None => "Not Playing".to_string(),
+    };
+
+    let title_item =
+        MenuItemBuilder::with_id(TRAY_MENU_NOW_PLAYING_TITLE_ID, title_text)
+            .enabled(false)
+            .build(app)
+            .map_err(|e| e.to_string())?;
+
+    let sep1 = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
+
+    let settings_item =
+        MenuItemBuilder::with_id(TRAY_MENU_SETTINGS_ID, "Settings\u{2026}")
+            .build(app)
+            .map_err(|e| e.to_string())?;
+
     let open_item = MenuItemBuilder::with_id(TRAY_MENU_OPEN_ID, "Open Marconio")
         .build(app)
-        .map_err(|error| error.to_string())?;
-    let separator = PredefinedMenuItem::separator(app).map_err(|error| error.to_string())?;
+        .map_err(|e| e.to_string())?;
+
+    let sep2 = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
+
     let quit_item = MenuItemBuilder::with_id(TRAY_MENU_QUIT_ID, "Quit")
         .build(app)
-        .map_err(|error| error.to_string())?;
+        .map_err(|e| e.to_string())?;
 
-    let menu = MenuBuilder::new(app)
-        .items(&[&open_item, &separator, &quit_item])
+    let mut builder = MenuBuilder::new(app);
+
+    builder = builder.item(&title_item);
+
+    if let Some(sub) = subtitle {
+        let subtitle_item =
+            MenuItemBuilder::with_id(TRAY_MENU_NOW_PLAYING_SUBTITLE_ID, sub)
+                .enabled(false)
+                .build(app)
+                .map_err(|e| e.to_string())?;
+        builder = builder.item(&subtitle_item);
+    }
+
+    builder
+        .items(&[&sep1, &settings_item, &open_item, &sep2, &quit_item])
         .build()
-        .map_err(|error| error.to_string())?;
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[tauri::command]
+fn update_tray_menu(
+    title: Option<String>,
+    subtitle: Option<String>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return Ok(());
+    };
+
+    let menu = build_tray_menu(&app, title.as_deref(), subtitle.as_deref())?;
+    tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[tauri::command]
+fn update_tray_menu(_title: Option<String>, _subtitle: Option<String>) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn setup_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
+    let menu = build_tray_menu(app, None, None)?;
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
@@ -232,6 +303,12 @@ fn setup_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String
         .on_menu_event(|app, event| {
             if event.id() == TRAY_MENU_OPEN_ID {
                 reveal_main_window(app);
+                return;
+            }
+
+            if event.id() == TRAY_MENU_SETTINGS_ID {
+                reveal_main_window(app);
+                let _ = app.emit("tray-open-settings", ());
                 return;
             }
 
@@ -312,7 +389,8 @@ pub fn run() {
             stop_native_stream,
             set_audio_fx_preset,
             set_menu_bar_mode,
-            set_tray_preset
+            set_tray_preset,
+            update_tray_menu
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

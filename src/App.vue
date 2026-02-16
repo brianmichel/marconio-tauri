@@ -161,6 +161,7 @@ const presetButtonRefs = ref<Record<number, HTMLButtonElement | null>>({});
 
 let controller: AbortController | null = null;
 let unlistenNativeMediaControl: (() => void) | null = null;
+let unlistenTrayOpenSettings: (() => void) | null = null;
 let channelRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 function readAssignments(): PresetAssignments {
@@ -254,14 +255,20 @@ watch(
 );
 
 watch(
-  [activeSlot, isPlaying],
-  ([slot, playing]) => {
+  [activeSlot, isPlaying, currentPlayable],
+  ([slot, playing, playable]) => {
     if (!canUseTauriInvoke()) {
       return;
     }
-    const value = playing && slot !== null ? slot : null;
-    void invoke("set_tray_preset", { slot: value }).catch((error) => {
+    const slotValue = playing && slot !== null ? slot : null;
+    const title = playing && playable ? playable.title : null;
+    const subtitle = playing && playable?.subtitle ? playable.subtitle : null;
+
+    void invoke("set_tray_preset", { slot: slotValue }).catch((error) => {
       console.warn("[tray] Unable to update tray icon", error);
+    });
+    void invoke("update_tray_menu", { title, subtitle }).catch((error) => {
+      console.warn("[tray] Unable to update tray menu", error);
     });
   },
   { immediate: true },
@@ -769,6 +776,14 @@ onMounted(async () => {
     } catch (error) {
       console.warn("[audio] Unable to listen for native media controls", error);
     }
+
+    try {
+      unlistenTrayOpenSettings = await listen("tray-open-settings", () => {
+        openSettingsPanel();
+      });
+    } catch (error) {
+      console.warn("[tray] Unable to listen for settings event", error);
+    }
   }
 
   loadPlayableMedia();
@@ -792,6 +807,10 @@ onBeforeUnmount(() => {
   if (unlistenNativeMediaControl) {
     unlistenNativeMediaControl();
     unlistenNativeMediaControl = null;
+  }
+  if (unlistenTrayOpenSettings) {
+    unlistenTrayOpenSettings();
+    unlistenTrayOpenSettings = null;
   }
   if (lcdThemeAnimationTimer) {
     clearTimeout(lcdThemeAnimationTimer);
