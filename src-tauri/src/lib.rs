@@ -1,10 +1,12 @@
 mod audio_engine;
+mod shazam;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod tray_icon;
 
 use crate::audio_engine::{AudioFxPreset, NowPlayingMetadata, PlaybackManager};
+use crate::shazam::{RecognizedTrack, ShazamManager};
 use serde_json::Value;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri::{
@@ -30,6 +32,10 @@ const TRAY_MENU_QUIT_ID: &str = "tray.quit";
 #[derive(Default)]
 struct UiState {
     menu_bar_only: bool,
+}
+
+struct ShazamState {
+    manager: Arc<ShazamManager>,
 }
 
 #[tauri::command]
@@ -184,6 +190,34 @@ fn set_menu_bar_mode(
     state.menu_bar_only = enabled;
 
     Ok(())
+}
+
+#[tauri::command]
+fn shazam_identify_now(
+    playback: tauri::State<'_, Mutex<PlaybackManager>>,
+    shazam: tauri::State<'_, ShazamState>,
+) -> Result<(), String> {
+    let source = {
+        let manager = playback
+            .lock()
+            .map_err(|_| "audio engine state lock poisoned".to_string())?;
+        if !manager.is_stream_running() {
+            return Err("Start playback before using song recognition.".to_string());
+        }
+        manager.now_playing()
+    };
+
+    shazam.manager.identify_now(source)
+}
+
+#[tauri::command]
+fn shazam_get_history(shazam: tauri::State<'_, ShazamState>) -> Result<Vec<RecognizedTrack>, String> {
+    Ok(shazam.manager.get_history())
+}
+
+#[tauri::command]
+fn shazam_clear_history(shazam: tauri::State<'_, ShazamState>) -> Result<(), String> {
+    shazam.manager.clear_history()
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -348,9 +382,25 @@ pub fn run() {
         .manage(Mutex::new(PlaybackManager::default()))
         .manage(Mutex::new(UiState::default()))
         .setup(|app| {
-            let state = app.state::<Mutex<PlaybackManager>>();
-            match state.lock() {
-                Ok(mut manager) => manager.initialize_media_controls(app.handle().clone()),
+            let shazam_manager = Arc::new(
+                ShazamManager::new(app.handle().clone())
+                    .map_err(|error| format!("[shazam] init failed: {error}"))?,
+            );
+            app.manage(ShazamState {
+                manager: Arc::clone(&shazam_manager),
+            });
+
+            let playback_state = app.state::<Mutex<PlaybackManager>>();
+            match playback_state.lock() {
+                Ok(mut manager) => {
+                    manager.initialize_media_controls(app.handle().clone());
+                    manager.set_audio_frame_tap(Some(Arc::new({
+                        let shazam_manager = Arc::clone(&shazam_manager);
+                        move |samples, channels, sample_rate| {
+                            shazam_manager.ingest_audio(samples, channels, sample_rate);
+                        }
+                    })));
+                }
                 Err(_) => {
                     eprintln!("[audio] unable to initialize media controls: state lock poisoned")
                 }
@@ -388,7 +438,10 @@ pub fn run() {
             set_audio_fx_preset,
             set_menu_bar_mode,
             set_tray_preset,
-            update_tray_menu
+            update_tray_menu,
+            shazam_identify_now,
+            shazam_get_history,
+            shazam_clear_history
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

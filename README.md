@@ -21,6 +21,8 @@ Keyboard shortcuts work the way you'd expect: `1`–`6` for presets, `Space` to 
 
 On macOS and Windows, Marconio can live in your menu bar / system tray instead of the dock. The tray icon shows which preset you're listening to, and right-clicking it shows the current track info and a shortcut into settings.
 
+On macOS 12+, Marconio also has a manual **FIND SONG** button in the header. Press it while audio is playing to run ShazamKit recognition against the active stream. Matches are saved in the **HITS** panel so you can review them later.
+
 Your preset assignments, display theme, and FX choice are remembered between sessions.
 
 ## What might not work
@@ -29,6 +31,7 @@ Your preset assignments, display theme, and FX choice are remembered between ses
 - **Linux** — haven't tried it at all, in theory it might work.
 - **No volume knob** — volume is whatever your system volume is. In-app control isn't implemented yet.
 - **Toolchain quirks on macOS** — if you're building from source and hit a `libclang` architecture mismatch error, it's a Rust/Xcode toolchain issue, not a Marconio bug.
+- **Shazam feature availability** — song recognition requires macOS 12+ and an app signing profile with the ShazamKit capability enabled.
 
 ## Building from source
 

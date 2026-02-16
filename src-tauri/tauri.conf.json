@@ -48,7 +48,7 @@
       },
       "files": {},
       "hardenedRuntime": true,
-      "minimumSystemVersion": "10.13",
+      "minimumSystemVersion": "12.0",
       "signingIdentity": "Developer ID Application"
     },
     "active": true,

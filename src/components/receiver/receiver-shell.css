@@ -111,6 +111,56 @@
   z-index: 11;
 }
 
+.shazam-actions {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 4px;
+  z-index: 13;
+}
+
+.shazam-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, transparent 50%),
+    linear-gradient(180deg, #3b444c 0%, #2b333a 100%);
+  color: #d7e0ea;
+  font-family: var(--display-font);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 5px 6px 4px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.shazam-btn:hover:enabled {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+    linear-gradient(180deg, #44505a 0%, #33404a 100%);
+}
+
+.shazam-btn:focus-visible {
+  outline: 1px solid var(--theme-focus-outline);
+  outline-offset: 1px;
+}
+
+.shazam-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.shazam-btn--ghost {
+  background: rgba(255, 255, 255, 0.03);
+  color: #acb8c6;
+}
+
 .unit.theme--amber {
   --lcd-border: #7a4120;
   --lcd-glow: rgba(255, 240, 210, 0.3);
