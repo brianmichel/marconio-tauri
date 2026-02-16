@@ -110,7 +110,11 @@ fn set_audio_fx_preset(
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 fn reveal_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    let _ = app.show();
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app.show();
+    }
+
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
