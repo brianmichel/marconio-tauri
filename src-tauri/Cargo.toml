@@ -27,4 +27,5 @@ rodio = { version = "0.20", default-features = true }
 minimp3 = "0.5"
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
 souvlaki = "0.8"
