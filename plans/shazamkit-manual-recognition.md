@@ -28,17 +28,15 @@ Scope: macOS manual song recognition for currently playing stream, persistent hi
 | T6 | Add top-window "magic find" button UI and control states | DONE | Added controls in `App.vue` + styles in `receiver-shell.css` |
 | T7 | Add reusable in-app recognized tracks panel component | DONE | Added `RecognizedTracksPanel.vue` and integrated with events/commands |
 | T8 | Add reusable toast component for success/failure feedback | DONE | Added `ToastStack.vue` and hooked to result events |
-| T9 | Update macOS minimum version to 12.0 and signing/capability config | IN_PROGRESS | `minimumSystemVersion` + signed local dev task + overlay signing identities added; waiting runtime verification on signed app |
-| T10 | Add tests and manual QA checklist for success/no-match/error paths | IN_PROGRESS | frontend tests/typecheck passed; Rust compile checks blocked by local toolchain |
+| T9 | Update macOS minimum version to 12.0 and signing/capability config | BLOCKED | Signed build attempted via `npm run dev:signed:build`; blocked locally because `Apple Development` identity is missing from keychain |
+| T10 | Add tests and manual QA checklist for success/no-match/error paths | DONE | Added Rust unit tests for history fallback/clear semantics; `cargo check`, `cargo test --lib shazam`, `vitest`, and `vue-tsc`/build pass |
 | T11 | Documentation updates (`README.md`) | DONE | added manual recognition usage and platform/capability note |
 
 ## Blockers / Inputs Needed
 - Apple Developer configuration confirmation:
   - App ID capability enabled for ShazamKit.
   - Signing identity/profile setup is valid and available in local keychain (`Apple Development`) and CI (`Developer ID Application`).
-- Local Rust toolchain alignment:
-  - `cargo check` currently blocked by `libclang` architecture mismatch (`stable-x86_64-apple-darwin` loading arm64 libclang).
-  - `cargo fmt` unavailable because `rustfmt` is not installed for current toolchain.
+  - Current local blocker: `npm run dev:signed:build` fails at codesign with `Apple Development: no identity found`.
 - If we choose OS notifications now (optional): confirmation on desired notification style and copy.
 
 ## Rolling Update Log
@@ -60,6 +58,11 @@ Scope: macOS manual song recognition for currently playing stream, persistent hi
 - 2026-02-16: Updated signing identity overlays: development=`Apple Development`, distribution=`Developer ID Application`.
 - 2026-02-16: Added runtime guard in native Shazam bridge to fail early when app is not launched from a valid bundle identifier (avoids opaque 202s in ad-hoc `tauri dev` runs).
 - 2026-02-16: Added first-class `deno task` scripts for signed dev workflows (`dev:signed`, `dev:signed:lldb`) and routed `mise` tasks through them.
+- 2026-02-16: Added unit tests in `src-tauri/src/shazam.rs` for corrupt-history fallback and clear-history persist ordering.
+- 2026-02-16: Fixed Windows compile failure by gating `finalize_match` behind `#[cfg(target_os = "macos")]`.
+- 2026-02-16: Verified Rust with Homebrew/arm64 environment (`env -u RUSTUP_TOOLCHAIN PATH="/opt/homebrew/bin:$PATH"`): `cargo check` and `cargo test --lib shazam` pass.
+- 2026-02-16: Re-ran frontend verification; `npm run test` and `npm run build` pass.
+- 2026-02-16: Attempted signed debug bundle build (`npm run dev:signed:build`); blocked by missing local `Apple Development` signing identity.
 
 ## Change Protocol
 - I will update this file whenever:
