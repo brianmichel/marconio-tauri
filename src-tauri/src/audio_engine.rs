@@ -417,10 +417,13 @@ struct PlaybackWorker {
     join_handle: JoinHandle<()>,
 }
 
+pub type AudioFrameTap = dyn Fn(&[f32], u16, u32) + Send + Sync + 'static;
+
 pub struct PlaybackManager {
     worker: Option<PlaybackWorker>,
     preset: Arc<AtomicU8>,
     now_playing: Option<NowPlayingMetadata>,
+    audio_frame_tap: Option<Arc<AudioFrameTap>>,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     media_controls: Option<MediaControls>,
 }
@@ -431,6 +434,7 @@ impl Default for PlaybackManager {
             worker: None,
             preset: Arc::new(AtomicU8::new(AudioFxPreset::Clean.as_u8())),
             now_playing: None,
+            audio_frame_tap: None,
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             media_controls: None,
         }
@@ -487,6 +491,18 @@ impl PlaybackManager {
         self.preset.store(preset.as_u8(), Ordering::Relaxed);
     }
 
+    pub fn set_audio_frame_tap(&mut self, tap: Option<Arc<AudioFrameTap>>) {
+        self.audio_frame_tap = tap;
+    }
+
+    pub fn is_stream_running(&self) -> bool {
+        self.worker.is_some()
+    }
+
+    pub fn now_playing(&self) -> Option<NowPlayingMetadata> {
+        self.now_playing.clone()
+    }
+
     pub fn start_stream(&mut self, stream_url: String, now_playing: Option<NowPlayingMetadata>) {
         self.stop_stream();
         if let Some(metadata) = now_playing {
@@ -495,9 +511,10 @@ impl PlaybackManager {
         }
 
         let preset = Arc::clone(&self.preset);
+        let audio_frame_tap = self.audio_frame_tap.as_ref().map(Arc::clone);
         let (stop_tx, stop_rx) = mpsc::channel::<()>();
         let join_handle = thread::spawn(move || {
-            if let Err(error) = run_stream_worker(stream_url, preset, stop_rx) {
+            if let Err(error) = run_stream_worker(stream_url, preset, stop_rx, audio_frame_tap) {
                 eprintln!("[audio] worker exited with error: {}", error);
             }
         });
@@ -584,6 +601,7 @@ fn run_stream_worker(
     stream_url: String,
     preset: Arc<AtomicU8>,
     stop_rx: Receiver<()>,
+    audio_frame_tap: Option<Arc<AudioFrameTap>>,
 ) -> Result<(), String> {
     eprintln!("[audio] opening stream {}", stream_url);
     let response = reqwest::blocking::Client::new()
@@ -639,6 +657,10 @@ fn run_stream_worker(
 
         processor.configure(sample_rate, channels, preset_value);
         processor.process_buffer(&mut processed);
+
+        if let Some(tap) = audio_frame_tap.as_ref() {
+            tap(processed.as_slice(), channels as u16, sample_rate);
+        }
 
         sink.append(SamplesBuffer::new(channels as u16, sample_rate, processed));
 

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "macOS": {
+      "signingIdentity": "Apple Development",
+      "files": {
+        "embedded.provisionprofile": "../provisioning/ci-development-marconio.provisionprofile"
+      }
+    }
+  }
+}

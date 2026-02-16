@@ -11,12 +11,21 @@ import AudioFxSegmentedControl from "./components/receiver/AudioFxSegmentedContr
 import SupportDialog from "./components/receiver/SupportDialog.vue";
 import ReceiverSettingsPanel from "./components/receiver/ReceiverSettingsPanel.vue";
 import ReceiverModelMenu from "./components/receiver/ReceiverModelMenu.vue";
+import RecognizedTracksPanel from "./components/receiver/RecognizedTracksPanel.vue";
+import ToastStack from "./components/receiver/ToastStack.vue";
 import { AUDIO_FX_PRESETS, type AudioFxPreset } from "./audio/fxPresets";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useGlobalReceiverHotkeys } from "./composables/useGlobalReceiverHotkeys";
 import { useNativePlayback } from "./composables/useNativePlayback";
 import { usePlayableCatalog } from "./composables/usePlayableCatalog";
 import { usePresetController } from "./composables/usePresetController";
+import type {
+  RecognizedTrack,
+  ShazamHistoryPayload,
+  ShazamResultPayload,
+  ShazamStatusPayload,
+  ToastItem,
+} from "./shazam/types";
 
 const STORAGE_KEY = "nts-user-presets-v1";
 const LCD_THEME_KEY = "lcd-theme-v1";
@@ -115,6 +124,9 @@ function cycleLcdTheme() {
 }
 
 let unlistenTrayOpenSettings: (() => void) | null = null;
+let unlistenShazamStatus: (() => void) | null = null;
+let unlistenShazamResult: (() => void) | null = null;
+let unlistenShazamHistory: (() => void) | null = null;
 
 function readAssignments(): PresetAssignments {
   const defaults: PresetAssignments = {
@@ -324,6 +336,12 @@ function setAudioFxPreset(preset: AudioFxPreset) {
 }
 
 const modelMenuVisible = ref(false);
+const recognizedPanelVisible = ref(false);
+const recognizedTracks = ref<RecognizedTrack[]>([]);
+const isShazamListening = ref(false);
+const toasts = ref<ToastItem[]>([]);
+let toastCounter = 0;
+const isShazamAvailable = computed(() => isMacPlatform.value && canUseTauriInvoke());
 
 function toggleModelMenu() {
   modelMenuVisible.value = !modelMenuVisible.value;
@@ -362,6 +380,75 @@ function setMenuBarOnlyMode(enabled: boolean) {
   }
 
   menuBarOnlyMode.value = enabled;
+}
+
+function pushToast(message: string, kind: ToastItem["kind"]) {
+  const toast: ToastItem = {
+    id: ++toastCounter,
+    message,
+    kind,
+  };
+  toasts.value = [toast, ...toasts.value].slice(0, 4);
+  setTimeout(() => {
+    dismissToast(toast.id);
+  }, 4200);
+}
+
+function dismissToast(id: number) {
+  toasts.value = toasts.value.filter((toast) => toast.id !== id);
+}
+
+function openRecognizedPanel() {
+  recognizedPanelVisible.value = true;
+  closeModelMenu();
+}
+
+function closeRecognizedPanel() {
+  recognizedPanelVisible.value = false;
+}
+
+async function identifySongNow() {
+  if (!isShazamAvailable.value) {
+    return;
+  }
+
+  try {
+    await invoke("shazam_identify_now");
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : "Unable to start song recognition.";
+    pushToast(message, "error");
+  }
+}
+
+async function clearRecognizedHistory() {
+  if (!isShazamAvailable.value) {
+    return;
+  }
+
+  try {
+    await invoke("shazam_clear_history");
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : "Unable to clear recognized tracks.";
+    pushToast(message, "error");
+  }
+}
+
+async function loadRecognizedHistory() {
+  if (!isShazamAvailable.value) {
+    recognizedTracks.value = [];
+    return;
+  }
+
+  try {
+    const history = await invoke<RecognizedTrack[]>("shazam_get_history");
+    recognizedTracks.value = history;
+  } catch (error) {
+    console.warn("[shazam] Unable to load history", error);
+  }
 }
 
 useGlobalReceiverHotkeys({
@@ -405,9 +492,45 @@ onMounted(async () => {
     } catch (error) {
       console.warn("[tray] Unable to listen for settings event", error);
     }
+
+    if (isMacPlatform.value) {
+      try {
+        unlistenShazamStatus = await listen<ShazamStatusPayload>("shazam-status", (event) => {
+          isShazamListening.value = event.payload.status === "listening";
+        });
+      } catch (error) {
+        console.warn("[shazam] Unable to listen for status events", error);
+      }
+
+      try {
+        unlistenShazamResult = await listen<ShazamResultPayload>("shazam-result", (event) => {
+          const kind = event.payload.kind;
+          if (kind === "match") {
+            pushToast(event.payload.message, "success");
+            return;
+          }
+          if (kind === "noMatch") {
+            pushToast(event.payload.message, "info");
+            return;
+          }
+          pushToast(event.payload.message, "error");
+        });
+      } catch (error) {
+        console.warn("[shazam] Unable to listen for result events", error);
+      }
+
+      try {
+        unlistenShazamHistory = await listen<ShazamHistoryPayload>("shazam-history", (event) => {
+          recognizedTracks.value = event.payload.history;
+        });
+      } catch (error) {
+        console.warn("[shazam] Unable to listen for history events", error);
+      }
+    }
   }
 
   loadPlayableMedia();
+  loadRecognizedHistory();
 });
 
 onBeforeUnmount(() => {
@@ -418,6 +541,18 @@ onBeforeUnmount(() => {
   if (lcdThemeAnimationTimer) {
     clearTimeout(lcdThemeAnimationTimer);
     lcdThemeAnimationTimer = null;
+  }
+  if (unlistenShazamStatus) {
+    unlistenShazamStatus();
+    unlistenShazamStatus = null;
+  }
+  if (unlistenShazamResult) {
+    unlistenShazamResult();
+    unlistenShazamResult = null;
+  }
+  if (unlistenShazamHistory) {
+    unlistenShazamHistory();
+    unlistenShazamHistory = null;
   }
 });
 </script>
@@ -436,12 +571,37 @@ onBeforeUnmount(() => {
           :visible="modelMenuVisible"
           :is-loading="isLoading"
           :is-playing="isPlaying"
+          :is-shazam-available="isShazamAvailable"
           @toggle="toggleModelMenu"
           @close="closeModelMenu"
           @refresh="loadPlayableMedia(); closeModelMenu()"
           @settings="openSettingsPanel"
+          @history="openRecognizedPanel"
           @stop="stopPlayback(); closeModelMenu()"
         />
+        <button
+          v-if="isShazamAvailable"
+          type="button"
+          class="shazam-identify-btn"
+          :class="{ 'shazam-identify-btn--active': isShazamListening }"
+          :disabled="isShazamListening || !isPlaying"
+          :aria-busy="isShazamListening ? 'true' : 'false'"
+          :title="isPlaying ? 'Identify the current song' : 'Start playback to identify songs'"
+          @mousedown.stop
+          @click.stop="identifySongNow"
+        >
+          <span class="viewfinder-icon" aria-hidden="true">
+            <span class="vf-corner vf-corner--tl" />
+            <span class="vf-corner vf-corner--tr" />
+            <span class="vf-corner vf-corner--bl" />
+            <span class="vf-corner vf-corner--br" />
+            <span class="vf-bars">
+              <span class="vf-bar" />
+              <span class="vf-bar" />
+              <span class="vf-bar" />
+            </span>
+          </span>
+        </button>
       </header>
 
       <LcdDisplay
@@ -502,6 +662,16 @@ onBeforeUnmount(() => {
         @assign="assignSlotFromMenu"
         @clear="clearContextMenuSlot"
       />
+
+      <RecognizedTracksPanel
+        :visible="recognizedPanelVisible"
+        :tracks="recognizedTracks"
+        :is-listening="isShazamListening"
+        @close="closeRecognizedPanel"
+        @clear="clearRecognizedHistory"
+      />
+
+      <ToastStack :toasts="toasts" @dismiss="dismissToast" />
     </div>
   </main>
 </template>

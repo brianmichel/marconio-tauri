@@ -8,7 +8,12 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "dev:signed:build": "tauri build --debug --bundles app --ci --config src-tauri/tauri.ci-development.conf.json",
+    "dev:signed": "deno task dev:signed:build && ./src-tauri/target/debug/bundle/macos/Marconio.app/Contents/MacOS/Marconio",
+    "dev:signed:lldb": "deno task dev:signed:build && lldb -- ./src-tauri/target/debug/bundle/macos/Marconio.app/Contents/MacOS/Marconio",
+    "bundle:ci:development": "tauri build --config src-tauri/tauri.ci-development.conf.json",
+    "bundle:ci:distribution": "tauri build --config src-tauri/tauri.ci-distribution.conf.json"
   },
   "dependencies": {
     "vue": "^3.5.13",

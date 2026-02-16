@@ -17,7 +17,7 @@ jobs:
         include:
           - os: macos-latest
             platform: macos
-            args: ""
+            args: --config src-tauri/tauri.ci-distribution.conf.json
           - os: windows-latest
             platform: windows
             args: --bundles msi
