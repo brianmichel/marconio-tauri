@@ -64,6 +64,8 @@ Scope: macOS manual song recognition for currently playing stream, persistent hi
 - 2026-02-16: Re-ran frontend verification; `npm run test` and `npm run build` pass.
 - 2026-02-16: Attempted signed debug bundle build (`npm run dev:signed:build`); blocked by missing local `Apple Development` signing identity.
 - 2026-02-16: Hardened release workflow to fail fast when macOS signing/notary secrets are missing and restricted macOS release bundle to DMG (`--bundles dmg`).
+- 2026-02-16: Corrected release notarization env mapping for Tauri v2 (`APPLE_API_KEY`=key id, `APPLE_API_KEY_PATH`=AuthKey `.p8` file generated from secret) to prevent silent notarization skips.
+- 2026-02-16: Added explicit post-build macOS notarization checks in CI (`xcrun stapler validate` for both `.app` and `.dmg`) and pinned Tauri action `projectPath` to `.`.
 
 ## Change Protocol
 - I will update this file whenever:
