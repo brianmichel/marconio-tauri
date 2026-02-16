@@ -17,8 +17,6 @@ type UsePlayableCatalogOptions = {
   currentPlayable: Ref<MediaPlayable | null>;
   isPlaying: Ref<boolean>;
   errorMessage: Ref<string | null>;
-  getOpenContextSlot: () => 3 | 4 | 5 | 6 | null;
-  closeContextMenu: () => void;
 };
 
 export function usePlayableCatalog(options: UsePlayableCatalogOptions) {
@@ -40,19 +38,11 @@ export function usePlayableCatalog(options: UsePlayableCatalogOptions) {
   let channelRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   function normalizeAssignments() {
-    let changed = false;
-
     for (const slot of USER_SLOTS) {
       const alias = options.assignments.value[slot];
       if (alias && !mixtapeByAlias.value.has(alias)) {
         options.assignments.value[slot] = null;
-        changed = true;
       }
-    }
-
-    const openSlot = options.getOpenContextSlot();
-    if (changed && openSlot && !options.assignments.value[openSlot]) {
-      options.closeContextMenu();
     }
   }
 

@@ -16,6 +16,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { useGlobalReceiverHotkeys } from "./composables/useGlobalReceiverHotkeys";
 import { useNativePlayback } from "./composables/useNativePlayback";
 import { usePlayableCatalog } from "./composables/usePlayableCatalog";
+import { usePresetController } from "./composables/usePresetController";
 
 const STORAGE_KEY = "nts-user-presets-v1";
 const LCD_THEME_KEY = "lcd-theme-v1";
@@ -113,19 +114,6 @@ function cycleLcdTheme() {
   }, 450);
 }
 
-const contextMenu = ref<{
-  visible: boolean;
-  slot: UserSlot | null;
-  x: number;
-  y: number;
-}>({
-  visible: false,
-  slot: null,
-  x: 0,
-  y: 0,
-});
-const presetButtonRefs = ref<Record<number, HTMLButtonElement | null>>({});
-
 let unlistenTrayOpenSettings: (() => void) | null = null;
 
 function readAssignments(): PresetAssignments {
@@ -175,8 +163,6 @@ const { channels, mixtapes, mixtapeByAlias, isLoading, loadPlayableMedia } = use
   currentPlayable,
   isPlaying,
   errorMessage,
-  getOpenContextSlot: () => contextMenu.value.slot,
-  closeContextMenu,
 });
 
 watch(
@@ -265,6 +251,29 @@ const channelTwo = computed(
     ) ?? null,
 );
 
+const {
+  contextMenu,
+  presetCards,
+  contextMenuHasAssignment,
+  closeContextMenu,
+  setPresetButtonRef,
+  assignSlotFromMenu,
+  clearContextMenuSlot,
+  onPresetPress,
+  onPresetContextMenu,
+  onPresetContextMenuByKeyboard,
+  onPresetHotkey,
+} = usePresetController({
+  assignments,
+  channelOne,
+  channelTwo,
+  mixtapeByAlias,
+  activeSlot,
+  currentPlayable,
+  startPlayback,
+  stopPlayback,
+});
+
 const mixtapeOptions = computed(() =>
   mixtapes.value
     .filter(
@@ -314,44 +323,6 @@ function setAudioFxPreset(preset: AudioFxPreset) {
   audioFxPreset.value = preset;
 }
 
-const presetCards = computed(() => {
-  return [1, 2, 3, 4, 5, 6].map((slot) => {
-    if (slot === 1) {
-      return {
-        slot,
-        locked: true,
-        playable: channelOne.value,
-      };
-    }
-
-    if (slot === 2) {
-      return {
-        slot,
-        locked: true,
-        playable: channelTwo.value,
-      };
-    }
-
-    const assignedAlias = assignments.value[slot as UserSlot];
-    const playable = assignedAlias ? (mixtapeByAlias.value.get(assignedAlias) ?? null) : null;
-
-    return {
-      slot,
-      locked: false,
-      playable,
-    };
-  });
-});
-
-const contextMenuHasAssignment = computed(() => {
-  const slot = contextMenu.value.slot;
-  if (!slot) {
-    return false;
-  }
-
-  return Boolean(assignments.value[slot]);
-});
-
 const modelMenuVisible = ref(false);
 
 function toggleModelMenu() {
@@ -391,122 +362,6 @@ function setMenuBarOnlyMode(enabled: boolean) {
   }
 
   menuBarOnlyMode.value = enabled;
-}
-
-function closeContextMenu() {
-  contextMenu.value.visible = false;
-  contextMenu.value.slot = null;
-}
-
-function setPresetButtonRef(slot: number, element: unknown) {
-  presetButtonRefs.value[slot] = element instanceof HTMLButtonElement ? element : null;
-}
-
-function openContextMenuAt(slot: UserSlot, x: number, y: number) {
-  const menuWidth = 210;
-  const menuMaxHeight = 220;
-  const padding = 6;
-
-  contextMenu.value.slot = slot;
-  contextMenu.value.x = Math.max(
-    padding,
-    Math.min(x, window.innerWidth - menuWidth - padding),
-  );
-  contextMenu.value.y = Math.max(
-    padding,
-    Math.min(y, window.innerHeight - menuMaxHeight - padding),
-  );
-  contextMenu.value.visible = true;
-}
-
-function openContextMenu(event: MouseEvent, slot: UserSlot) {
-  openContextMenuAt(slot, event.clientX, event.clientY);
-}
-
-function openContextMenuForSlot(slot: UserSlot) {
-  const button = presetButtonRefs.value[slot];
-  if (button) {
-    const rect = button.getBoundingClientRect();
-    openContextMenuAt(slot, rect.left + rect.width / 2, rect.bottom + 6);
-    return;
-  }
-
-  openContextMenuAt(slot, window.innerWidth / 2, window.innerHeight / 2);
-}
-
-function assignSlotFromMenu(alias: string) {
-  const slot = contextMenu.value.slot;
-  if (!slot) {
-    return;
-  }
-
-  assignments.value[slot] = alias;
-  const playable = mixtapeByAlias.value.get(alias) ?? null;
-
-  closeContextMenu();
-
-  if (playable) {
-    void startPlayback(playable, slot);
-  }
-}
-
-function clearUserSlot(slot: UserSlot) {
-  assignments.value[slot] = null;
-  closeContextMenu();
-  if (activeSlot.value === slot) {
-    void stopPlayback();
-    activeSlot.value = null;
-    currentPlayable.value = null;
-  }
-}
-
-function clearContextMenuSlot() {
-  const slot = contextMenu.value.slot;
-  if (!slot) {
-    return;
-  }
-
-  clearUserSlot(slot);
-}
-
-function activatePresetSlot(slot: number) {
-  const card = presetCards.value.find((item) => item.slot === slot);
-  if (!card) {
-    return;
-  }
-
-  if (card.playable) {
-    void startPlayback(card.playable, slot);
-    return;
-  }
-
-  if (!card.locked && slot >= 3 && slot <= 6) {
-    openContextMenuForSlot(slot as UserSlot);
-  }
-}
-
-function onPresetPress(slot: number) {
-  activatePresetSlot(slot);
-}
-
-function onPresetContextMenu(event: MouseEvent, slot: number, locked: boolean) {
-  if (locked || slot < 3 || slot > 6) {
-    return;
-  }
-
-  openContextMenu(event, slot as UserSlot);
-}
-
-function onPresetContextMenuByKeyboard(slot: number) {
-  if (slot < 3 || slot > 6) {
-    return;
-  }
-
-  openContextMenuForSlot(slot as UserSlot);
-}
-
-function onPresetHotkey(slot: number) {
-  activatePresetSlot(slot);
 }
 
 useGlobalReceiverHotkeys({
