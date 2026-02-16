@@ -111,54 +111,210 @@
   z-index: 11;
 }
 
-.shazam-actions {
+/* ── shazam identify button (preset-style) ── */
+.shazam-identify-wrap {
   position: absolute;
-  right: 2px;
+  right: 4px;
   top: 50%;
   transform: translateY(-50%);
-  display: flex;
-  gap: 4px;
   z-index: 13;
+  border-radius: 5px;
+  border: 1px solid #0a0b0d;
+  background: linear-gradient(180deg, #080a0c 0%, #0d0f11 100%);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.6),
+    inset 0 -1px 2px rgba(255, 255, 255, 0.03),
+    0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 2px;
+  transition:
+    border-color 280ms ease,
+    box-shadow 280ms ease;
 }
 
-.shazam-btn {
+.shazam-identify-wrap--active {
+  border-color: var(--theme-accent-border);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.5),
+    inset 0 0 8px var(--theme-accent-soft),
+    0 0 0 1px var(--theme-accent-outline),
+    0 0 12px var(--theme-accent-glow);
+}
+
+.shazam-identify-btn {
   -webkit-appearance: none;
   appearance: none;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, transparent 50%),
-    linear-gradient(180deg, #3b444c 0%, #2b333a 100%);
-  color: #d7e0ea;
-  font-family: var(--display-font);
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 5px 6px 4px;
+  border: none;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #2c3035 0%, #222629 30%, #1a1d20 70%, #141618 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 1px 0 0 rgba(255, 255, 255, 0.04),
+    inset -1px 0 0 rgba(255, 255, 255, 0.04),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.25),
+    0 2px 3px rgba(0, 0, 0, 0.5),
+    0 4px 8px rgba(0, 0, 0, 0.25);
+  width: 28px;
+  height: 22px;
   cursor: pointer;
-  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition:
+    box-shadow 60ms ease,
+    transform 60ms ease,
+    background 60ms ease;
 }
 
-.shazam-btn:hover:enabled {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
-    linear-gradient(180deg, #44505a 0%, #33404a 100%);
+.shazam-identify-btn:hover {
+  background: linear-gradient(180deg, #333840 0%, #282c30 30%, #1e2124 70%, #181a1d 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    inset 1px 0 0 rgba(255, 255, 255, 0.05),
+    inset -1px 0 0 rgba(255, 255, 255, 0.05),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.25),
+    0 2px 3px rgba(0, 0, 0, 0.5),
+    0 4px 8px rgba(0, 0, 0, 0.25);
 }
 
-.shazam-btn:focus-visible {
+.shazam-identify-btn:active {
+  transform: translateY(1px);
+  background: linear-gradient(180deg, #1e2124 0%, #1a1d20 40%, #161819 100%);
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.4),
+    inset 0 0 6px rgba(0, 0, 0, 0.15),
+    0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.shazam-identify-btn:focus-visible {
   outline: 1px solid var(--theme-focus-outline);
   outline-offset: 1px;
 }
 
-.shazam-btn:disabled {
-  opacity: 0.45;
+.shazam-identify-btn:disabled {
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
-.shazam-btn--ghost {
-  background: rgba(255, 255, 255, 0.03);
-  color: #acb8c6;
+.shazam-identify-btn:disabled:active {
+  transform: none;
+  background: linear-gradient(180deg, #2c3035 0%, #222629 30%, #1a1d20 70%, #141618 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 1px 0 0 rgba(255, 255, 255, 0.04),
+    inset -1px 0 0 rgba(255, 255, 255, 0.04),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.25),
+    0 2px 3px rgba(0, 0, 0, 0.5),
+    0 4px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* viewfinder icon container */
+.viewfinder-icon {
+  position: relative;
+  width: 16px;
+  height: 16px;
+}
+
+/* four corner brackets */
+.vf-corner {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-color: #555e66;
+  border-style: solid;
+  border-width: 0;
+  transition: border-color 280ms ease;
+}
+
+.vf-corner--tl {
+  top: 0;
+  left: 0;
+  border-top-width: 1.5px;
+  border-left-width: 1.5px;
+  border-top-left-radius: 1px;
+}
+
+.vf-corner--tr {
+  top: 0;
+  right: 0;
+  border-top-width: 1.5px;
+  border-right-width: 1.5px;
+  border-top-right-radius: 1px;
+}
+
+.vf-corner--bl {
+  bottom: 0;
+  left: 0;
+  border-bottom-width: 1.5px;
+  border-left-width: 1.5px;
+  border-bottom-left-radius: 1px;
+}
+
+.vf-corner--br {
+  bottom: 0;
+  right: 0;
+  border-bottom-width: 1.5px;
+  border-right-width: 1.5px;
+  border-bottom-right-radius: 1px;
+}
+
+/* music notes inside the viewfinder */
+.vf-notes {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  pointer-events: none;
+}
+
+.vf-note {
+  color: #555e66;
+  font-size: 8px;
+  line-height: 1;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  transition: color 280ms ease;
+}
+
+/* ── listening (active) state ── */
+.shazam-identify-wrap--active .vf-corner {
+  border-color: var(--theme-slot-active);
+}
+
+.shazam-identify-wrap--active .vf-note {
+  color: var(--theme-slot-active);
+  text-shadow: 0 0 6px var(--theme-accent-glow);
+}
+
+.shazam-identify-wrap--active .vf-note:nth-child(1) {
+  animation: note-dance-1 1.2s ease-in-out infinite;
+}
+
+.shazam-identify-wrap--active .vf-note:nth-child(2) {
+  animation: note-dance-2 1.2s ease-in-out 0.4s infinite;
+}
+
+@keyframes note-dance-1 {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateY(-2px);
+    opacity: 1;
+  }
+}
+
+@keyframes note-dance-2 {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateY(-2.5px);
+    opacity: 1;
+  }
 }
 
 .unit.theme--amber {

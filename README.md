@@ -52,6 +52,11 @@ mise run dev
 
 # run a signed debug app bundle (recommended when testing ShazamKit)
 mise run dev_signed
+# or: deno task dev:signed
+
+# run signed app under lldb
+mise run dev_signed_lldb
+# or: deno task dev:signed:lldb
 
 # run tests
 mise run test

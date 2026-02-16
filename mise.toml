@@ -13,8 +13,13 @@ run = "env -u RUSTUP_TOOLCHAIN PATH=\"/opt/homebrew/bin:$PATH\" deno task tauri 
 [tasks.dev_signed]
 description = "Build and launch a signed debug macOS app bundle (for App Service-dependent features like ShazamKit)"
 run = """
-env -u RUSTUP_TOOLCHAIN PATH="/opt/homebrew/bin:$PATH" deno task tauri build --debug --bundles app --ci --config src-tauri/tauri.ci-development.conf.json
-open src-tauri/target/debug/bundle/macos/Marconio.app
+env -u RUSTUP_TOOLCHAIN PATH="/opt/homebrew/bin:$PATH" deno task dev:signed
+"""
+
+[tasks.dev_signed_lldb]
+description = "Build signed debug bundle and run inside lldb"
+run = """
+env -u RUSTUP_TOOLCHAIN PATH="/opt/homebrew/bin:$PATH" deno task dev:signed:lldb
 """
 
 [tasks.test]

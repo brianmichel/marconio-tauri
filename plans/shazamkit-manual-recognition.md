@@ -59,6 +59,7 @@ Scope: macOS manual song recognition for currently playing stream, persistent hi
 - 2026-02-16: Removed explicit ShazamKit entitlements plist path and moved to App Service + signing/bundle identity debugging.
 - 2026-02-16: Updated signing identity overlays: development=`Apple Development`, distribution=`Developer ID Application`.
 - 2026-02-16: Added runtime guard in native Shazam bridge to fail early when app is not launched from a valid bundle identifier (avoids opaque 202s in ad-hoc `tauri dev` runs).
+- 2026-02-16: Added first-class `deno task` scripts for signed dev workflows (`dev:signed`, `dev:signed:lldb`) and routed `mise` tasks through them.
 
 ## Change Protocol
 - I will update this file whenever:

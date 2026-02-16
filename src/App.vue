@@ -398,8 +398,9 @@ function dismissToast(id: number) {
   toasts.value = toasts.value.filter((toast) => toast.id !== id);
 }
 
-function toggleRecognizedPanel() {
-  recognizedPanelVisible.value = !recognizedPanelVisible.value;
+function openRecognizedPanel() {
+  recognizedPanelVisible.value = true;
+  closeModelMenu();
 }
 
 function closeRecognizedPanel() {
@@ -570,30 +571,38 @@ onBeforeUnmount(() => {
           :visible="modelMenuVisible"
           :is-loading="isLoading"
           :is-playing="isPlaying"
+          :is-shazam-available="isShazamAvailable"
           @toggle="toggleModelMenu"
           @close="closeModelMenu"
           @refresh="loadPlayableMedia(); closeModelMenu()"
           @settings="openSettingsPanel"
+          @history="openRecognizedPanel"
           @stop="stopPlayback(); closeModelMenu()"
         />
-        <div v-if="isShazamAvailable" class="shazam-actions" @mousedown.stop>
+        <div
+          v-if="isShazamAvailable"
+          class="shazam-identify-wrap"
+          :class="{ 'shazam-identify-wrap--active': isShazamListening }"
+          @mousedown.stop
+        >
           <button
             type="button"
-            class="shazam-btn"
+            class="shazam-identify-btn"
             :disabled="isShazamListening || !isPlaying"
             :aria-busy="isShazamListening ? 'true' : 'false'"
             :title="isPlaying ? 'Identify the current song' : 'Start playback to identify songs'"
             @click.stop="identifySongNow"
           >
-            {{ isShazamListening ? "LISTENING..." : "FIND SONG" }}
-          </button>
-          <button
-            type="button"
-            class="shazam-btn shazam-btn--ghost"
-            :title="`Open recognized tracks (${recognizedTracks.length})`"
-            @click.stop="toggleRecognizedPanel"
-          >
-            HITS {{ recognizedTracks.length }}
+            <span class="viewfinder-icon" aria-hidden="true">
+              <span class="vf-corner vf-corner--tl" />
+              <span class="vf-corner vf-corner--tr" />
+              <span class="vf-corner vf-corner--bl" />
+              <span class="vf-corner vf-corner--br" />
+              <span class="vf-notes">
+                <span class="vf-note">&#9834;</span>
+                <span class="vf-note">&#9835;</span>
+              </span>
+            </span>
           </button>
         </div>
       </header>

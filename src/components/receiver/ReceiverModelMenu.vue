@@ -3,6 +3,7 @@ defineProps<{
   visible: boolean;
   isLoading: boolean;
   isPlaying: boolean;
+  isShazamAvailable: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -11,6 +12,7 @@ const emit = defineEmits<{
   refresh: [];
   settings: [];
   stop: [];
+  history: [];
 }>();
 
 function onToggle() {
@@ -31,6 +33,10 @@ function onSettings() {
 
 function onStop() {
   emit("stop");
+}
+
+function onHistory() {
+  emit("history");
 }
 </script>
 
@@ -71,6 +77,15 @@ function onStop() {
         @click="onSettings"
       >
         SETTINGS
+      </button>
+      <button
+        v-if="isShazamAvailable"
+        type="button"
+        class="model-menu-item"
+        role="menuitem"
+        @click="onHistory"
+      >
+        HISTORY
       </button>
       <button
         type="button"
