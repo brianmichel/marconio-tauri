@@ -253,6 +253,20 @@ watch(
   { immediate: true },
 );
 
+watch(
+  [activeSlot, isPlaying],
+  ([slot, playing]) => {
+    if (!canUseTauriInvoke()) {
+      return;
+    }
+    const value = playing && slot !== null ? slot : null;
+    void invoke("set_tray_preset", { slot: value }).catch((error) => {
+      console.warn("[tray] Unable to update tray icon", error);
+    });
+  },
+  { immediate: true },
+);
+
 const channelOne = computed(
   () =>
     channels.value.find(

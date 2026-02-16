@@ -1,4 +1,6 @@
 mod audio_engine;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+mod tray_icon;
 
 use crate::audio_engine::{AudioFxPreset, NowPlayingMetadata, PlaybackManager};
 use serde_json::Value;
@@ -175,6 +177,40 @@ fn set_menu_bar_mode(
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
+#[tauri::command]
+fn set_tray_preset(slot: Option<u8>, app: tauri::AppHandle) -> Result<(), String> {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return Ok(());
+    };
+
+    match slot {
+        Some(n) => {
+            let (rgba, w, h) = tray_icon::render_preset_icon(n);
+            let icon = tauri::image::Image::new_owned(rgba, w, h);
+            tray.set_icon(Some(icon)).map_err(|e| e.to_string())?;
+        }
+        None => {
+            let (rgba, w, h) = tray_icon::render_idle_icon();
+            let icon = tauri::image::Image::new_owned(rgba, w, h);
+            tray.set_icon(Some(icon)).map_err(|e| e.to_string())?;
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let _ = tray.set_icon_as_template(true);
+    }
+
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[tauri::command]
+fn set_tray_preset(_slot: Option<u8>) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn setup_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
     let open_item = MenuItemBuilder::with_id(TRAY_MENU_OPEN_ID, "Open Marconio")
         .build(app)
@@ -275,7 +311,8 @@ pub fn run() {
             start_native_stream,
             stop_native_stream,
             set_audio_fx_preset,
-            set_menu_bar_mode
+            set_menu_bar_mode,
+            set_tray_preset
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

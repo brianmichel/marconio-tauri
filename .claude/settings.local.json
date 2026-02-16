@@ -3,7 +3,8 @@
     "allow": [
       "Bash(file:*)",
       "Bash(npx vue-tsc:*)",
-      "Bash(npx vite build:*)"
+      "Bash(npx vite build:*)",
+      "Bash(rustc:*)"
     ]
   }
 }
