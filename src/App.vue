@@ -19,8 +19,10 @@ import PresetContextMenu from "./components/receiver/PresetContextMenu.vue";
 import AudioFxSegmentedControl from "./components/receiver/AudioFxSegmentedControl.vue";
 import SupportDialog from "./components/receiver/SupportDialog.vue";
 import ReceiverSettingsPanel from "./components/receiver/ReceiverSettingsPanel.vue";
+import ReceiverModelMenu from "./components/receiver/ReceiverModelMenu.vue";
 import { AUDIO_FX_PRESETS, type AudioFxPreset } from "./audio/fxPresets";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { useGlobalReceiverHotkeys } from "./composables/useGlobalReceiverHotkeys";
 
 const client = createNTSClient();
 const STORAGE_KEY = "nts-user-presets-v1";
@@ -49,15 +51,6 @@ const isLcdThemeAnimating = ref(false);
 let lcdThemeAnimationTimer: ReturnType<typeof setTimeout> | null = null;
 const isLcdTuning = ref(false);
 const supportDialogVisible = ref(true);
-const BLOCKED_BROWSER_SHORTCUTS = new Set(["a", "r", "+", "=", "-", "0"]);
-const IS_DEV = import.meta.env.DEV;
-const EDITABLE_TARGET_SELECTOR = [
-  "input:not([readonly]):not([disabled])",
-  "textarea:not([readonly]):not([disabled])",
-  '[contenteditable=""]',
-  '[contenteditable="true"]',
-  '[role="textbox"]',
-].join(", ");
 
 function readLcdTheme(): LcdTheme {
   try {
@@ -681,30 +674,23 @@ function onPresetHotkey(slot: number) {
   activatePresetSlot(slot);
 }
 
-function isEditableTarget(target: EventTarget | null): boolean {
-  const element = target instanceof Element ? target : null;
-  if (!element) {
-    return false;
-  }
-
-  return element.closest(EDITABLE_TARGET_SELECTOR) !== null;
-}
-
-function preventBrowserContextMenu(event: MouseEvent) {
-  if (IS_DEV) {
-    return;
-  }
-
-  if (isEditableTarget(event.target)) {
-    return;
-  }
-
-  event.preventDefault();
-}
-
-function preventDocumentDrop(event: DragEvent) {
-  event.preventDefault();
-}
+useGlobalReceiverHotkeys({
+  isDev: import.meta.env.DEV,
+  supportDialogVisible,
+  contextMenuVisible: computed(() => contextMenu.value.visible),
+  modelMenuVisible,
+  settingsPanelVisible,
+  isPlaying,
+  activeSlot,
+  currentPlayable,
+  closeSettingsPanel,
+  closeContextMenu,
+  closeModelMenu,
+  onPresetHotkey,
+  onPresetPress,
+  startPlayback,
+  stopPlayback,
+});
 
 async function startWindowDrag() {
   try {
@@ -715,11 +701,6 @@ async function startWindowDrag() {
 }
 
 onMounted(async () => {
-  window.addEventListener("keydown", onGlobalKeyDown);
-  window.addEventListener("contextmenu", preventBrowserContextMenu);
-  window.addEventListener("dragover", preventDocumentDrop);
-  window.addEventListener("drop", preventDocumentDrop);
-
   if (canUseTauriInvoke()) {
     try {
       await invoke("set_audio_fx_preset", { preset: audioFxPreset.value });
@@ -755,10 +736,6 @@ watch([currentPlayable, isPlaying], () => {
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("keydown", onGlobalKeyDown);
-  window.removeEventListener("contextmenu", preventBrowserContextMenu);
-  window.removeEventListener("dragover", preventDocumentDrop);
-  window.removeEventListener("drop", preventDocumentDrop);
   controller?.abort();
   if (canUseTauriInvoke()) {
     void invoke("stop_native_stream").catch(() => {
@@ -779,76 +756,6 @@ onBeforeUnmount(() => {
   }
   clearChannelRefreshTimer();
 });
-
-function onGlobalKeyDown(event: KeyboardEvent) {
-  if (supportDialogVisible.value) {
-    return;
-  }
-
-  const editable = isEditableTarget(event.target);
-  const key = event.key.toLowerCase();
-  const hasPrimaryModifier = event.metaKey || event.ctrlKey;
-  const shortcutSlot = Number(event.key);
-
-  if (
-    !editable &&
-    hasPrimaryModifier &&
-    Number.isInteger(shortcutSlot) &&
-    shortcutSlot >= 1 &&
-    shortcutSlot <= 6
-  ) {
-    event.preventDefault();
-    onPresetHotkey(shortcutSlot);
-    return;
-  }
-
-  if (!editable && hasPrimaryModifier && BLOCKED_BROWSER_SHORTCUTS.has(key)) {
-    event.preventDefault();
-    return;
-  }
-
-  if (!editable && (event.key === "F5" || event.key === "F12")) {
-    event.preventDefault();
-    return;
-  }
-
-  if (event.key === "Escape") {
-    closeSettingsPanel();
-    closeContextMenu();
-    closeModelMenu();
-    return;
-  }
-
-  if (
-    editable ||
-    event.repeat ||
-    contextMenu.value.visible ||
-    modelMenuVisible.value ||
-    settingsPanelVisible.value
-  ) {
-    return;
-  }
-
-  if (event.code === "Space") {
-    event.preventDefault();
-
-    if (isPlaying.value) {
-      void stopPlayback();
-      return;
-    }
-
-    if (currentPlayable.value && activeSlot.value !== null) {
-      void startPlayback(currentPlayable.value, activeSlot.value);
-    }
-
-    return;
-  }
-
-  if (event.key >= "1" && event.key <= "6") {
-    event.preventDefault();
-    onPresetPress(Number(event.key));
-  }
-}
 </script>
 
 <template>
@@ -861,54 +768,16 @@ function onGlobalKeyDown(event: KeyboardEvent) {
         @mousedown.left="startWindowDrag"
       />
       <header class="unit-header" data-tauri-drag-region>
-        <div class="model-wrap">
-          <button
-            type="button"
-            class="brand-plate"
-            aria-haspopup="menu"
-            aria-controls="receiver-model-menu"
-            :aria-expanded="modelMenuVisible ? 'true' : 'false'"
-            @click="toggleModelMenu"
-          >
-            <span class="brand">MRC-1900</span>
-          </button>
-          <div v-if="modelMenuVisible" class="model-backdrop" @mousedown="closeModelMenu" />
-          <div
-            v-if="modelMenuVisible"
-            id="receiver-model-menu"
-            class="model-menu"
-            role="menu"
-            aria-label="Receiver controls"
-            @mousedown.stop
-          >
-            <button
-              type="button"
-              class="model-menu-item"
-              role="menuitem"
-              :disabled="isLoading"
-              @click="loadPlayableMedia(); closeModelMenu()"
-            >
-              {{ isLoading ? "SYNCING..." : "REFRESH" }}
-            </button>
-            <button
-              type="button"
-              class="model-menu-item"
-              role="menuitem"
-              @click="openSettingsPanel"
-            >
-              SETTINGS
-            </button>
-            <button
-              type="button"
-              class="model-menu-item"
-              role="menuitem"
-              :disabled="!isPlaying"
-              @click="stopPlayback(); closeModelMenu()"
-            >
-              STOP
-            </button>
-          </div>
-        </div>
+        <ReceiverModelMenu
+          :visible="modelMenuVisible"
+          :is-loading="isLoading"
+          :is-playing="isPlaying"
+          @toggle="toggleModelMenu"
+          @close="closeModelMenu"
+          @refresh="loadPlayableMedia(); closeModelMenu()"
+          @settings="openSettingsPanel"
+          @stop="stopPlayback(); closeModelMenu()"
+        />
       </header>
 
       <LcdDisplay
