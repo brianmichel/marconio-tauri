@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -23,6 +23,7 @@ const client = createNTSClient();
 const STORAGE_KEY = "nts-user-presets-v1";
 const LCD_THEME_KEY = "lcd-theme-v1";
 const AUDIO_FX_KEY = "audio-fx-preset-v2";
+const MENU_BAR_ONLY_KEY = "menu-bar-only-v1";
 const USER_SLOTS = [3, 4, 5, 6] as const;
 const LCD_THEMES = ["amber", "blue", "green", "purpleRed"] as const;
 
@@ -80,6 +81,14 @@ function readAudioFxPreset(): AudioFxPreset {
   return "clean";
 }
 
+function readMenuBarOnlyMode() {
+  try {
+    return localStorage.getItem(MENU_BAR_ONLY_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function canUseTauriInvoke() {
   return (
     typeof window !== "undefined" &&
@@ -87,6 +96,26 @@ function canUseTauriInvoke() {
     typeof (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !==
       "undefined"
   );
+}
+
+function detectMacPlatform() {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+
+  const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+  const probe = `${nav.userAgentData?.platform ?? ""} ${navigator.platform ?? ""} ${navigator.userAgent ?? ""}`;
+  return /mac|darwin/i.test(probe);
+}
+
+function detectWindowsPlatform() {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+
+  const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+  const probe = `${nav.userAgentData?.platform ?? ""} ${navigator.platform ?? ""} ${navigator.userAgent ?? ""}`;
+  return /windows|win32|win64|wow64/i.test(probe);
 }
 
 function nowPlayingFromPlayable(playable: MediaPlayable) {
@@ -163,6 +192,14 @@ function readAssignments(): PresetAssignments {
 const assignments = ref<PresetAssignments>(readAssignments());
 const lcdTheme = ref<LcdTheme>(readLcdTheme());
 const audioFxPreset = ref<AudioFxPreset>(readAudioFxPreset());
+const menuBarOnlyMode = ref(readMenuBarOnlyMode());
+const settingsPanelVisible = ref(false);
+const settingsPanelRef = ref<HTMLElement | null>(null);
+const settingsCloseRef = ref<HTMLElement | null>(null);
+let settingsTriggerEl: HTMLElement | null = null;
+const isMacPlatform = ref(detectMacPlatform());
+const isWindowsPlatform = ref(detectWindowsPlatform());
+const isTrayModeSupported = computed(() => isMacPlatform.value || isWindowsPlatform.value);
 
 watch(
   assignments,
@@ -190,6 +227,27 @@ watch(
     void invoke("set_audio_fx_preset", { preset: value })
       .catch((error) => {
         console.warn("[audio] Unable to set native preset", error);
+      });
+  },
+  { immediate: true },
+);
+
+watch(
+  menuBarOnlyMode,
+  (enabled) => {
+    try {
+      localStorage.setItem(MENU_BAR_ONLY_KEY, enabled ? "1" : "0");
+    } catch {
+      // Ignore storage errors.
+    }
+
+    if (!isTrayModeSupported.value || !canUseTauriInvoke()) {
+      return;
+    }
+
+    void invoke("set_menu_bar_mode", { enabled })
+      .catch((error) => {
+        console.warn("[window] Unable to apply menu bar mode", error);
       });
   },
   { immediate: true },
@@ -453,6 +511,70 @@ function closeModelMenu() {
   modelMenuVisible.value = false;
 }
 
+function openSettingsPanel() {
+  settingsTriggerEl = document.activeElement as HTMLElement | null;
+  settingsPanelVisible.value = true;
+  closeModelMenu();
+  closeContextMenu();
+  void nextTick(() => {
+    settingsCloseRef.value?.focus();
+  });
+}
+
+function closeSettingsPanel() {
+  settingsPanelVisible.value = false;
+  settingsTriggerEl?.focus();
+  settingsTriggerEl = null;
+}
+
+function handleSettingsKeydown(event: KeyboardEvent) {
+  if (event.key !== "Tab") return;
+
+  const panel = settingsPanelRef.value;
+  if (!panel) return;
+
+  const focusable = Array.from(
+    panel.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  );
+  if (focusable.length === 0) return;
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function handleRockerKeydown(event: KeyboardEvent) {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  event.preventDefault();
+  if (!isTrayModeSupported.value) return;
+
+  const next = event.key === "ArrowRight";
+  setMenuBarOnlyModeEnabled(next);
+
+  void nextTick(() => {
+    const group = (event.target as HTMLElement).closest(".setting-rocker");
+    const active = group?.querySelector<HTMLElement>('[aria-checked="true"]');
+    active?.focus();
+  });
+}
+
+function setMenuBarOnlyModeEnabled(enabled: boolean) {
+  if (!isTrayModeSupported.value) {
+    return;
+  }
+
+  menuBarOnlyMode.value = enabled;
+}
+
 function closeContextMenu() {
   contextMenu.value.visible = false;
   contextMenu.value.slot = null;
@@ -693,12 +815,19 @@ function onGlobalKeyDown(event: KeyboardEvent) {
   }
 
   if (event.key === "Escape") {
+    closeSettingsPanel();
     closeContextMenu();
     closeModelMenu();
     return;
   }
 
-  if (editable || event.repeat || contextMenu.value.visible || modelMenuVisible.value) {
+  if (
+    editable ||
+    event.repeat ||
+    contextMenu.value.visible ||
+    modelMenuVisible.value ||
+    settingsPanelVisible.value
+  ) {
     return;
   }
 
@@ -767,6 +896,14 @@ function onGlobalKeyDown(event: KeyboardEvent) {
               type="button"
               class="model-menu-item"
               role="menuitem"
+              @click="openSettingsPanel"
+            >
+              SETTINGS
+            </button>
+            <button
+              type="button"
+              class="model-menu-item"
+              role="menuitem"
               :disabled="!isPlaying"
               @click="stopPlayback(); closeModelMenu()"
             >
@@ -806,6 +943,96 @@ function onGlobalKeyDown(event: KeyboardEvent) {
         <p class="tagline">STREAMING RECEIVER</p>
         <div class="footer-line" />
       </footer>
+
+      <div
+        v-if="settingsPanelVisible"
+        class="settings-backdrop"
+        aria-hidden="true"
+        @mousedown="closeSettingsPanel"
+      />
+      <section
+        v-if="settingsPanelVisible"
+        ref="settingsPanelRef"
+        class="settings-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="receiver-settings-title"
+        @mousedown.stop
+        @keydown="handleSettingsKeydown"
+      >
+        <header class="settings-header">
+          <div class="settings-header-rule" aria-hidden="true" />
+          <p id="receiver-settings-title" class="settings-title">SETTINGS</p>
+          <div class="settings-header-rule" aria-hidden="true" />
+          <button
+            ref="settingsCloseRef"
+            type="button"
+            class="settings-close-button"
+            aria-label="Close settings"
+            @click="closeSettingsPanel"
+          >
+            &times;
+          </button>
+        </header>
+
+        <div class="settings-list">
+          <div class="setting-row">
+            <div class="setting-label-row" id="appmode-label">
+              <p class="setting-name">APP MODE</p>
+              <p class="setting-hint" id="appmode-hint">
+                {{
+                  isMacPlatform
+                    ? "Hides Dock icon when set to tray"
+                    : isWindowsPlatform
+                      ? "Hides taskbar icon when set to tray"
+                      : "Available on macOS and Windows"
+                }}
+              </p>
+            </div>
+            <div
+              class="setting-rocker"
+              role="radiogroup"
+              aria-labelledby="appmode-label"
+              @keydown="handleRockerKeydown"
+            >
+              <button
+                type="button"
+                role="radio"
+                class="rocker-key"
+                :class="{ 'rocker-key--active': !menuBarOnlyMode }"
+                :aria-checked="!menuBarOnlyMode"
+                :tabindex="!menuBarOnlyMode ? 0 : -1"
+                :disabled="!isTrayModeSupported"
+                @click="setMenuBarOnlyModeEnabled(false)"
+              >
+                DOCK
+              </button>
+              <button
+                type="button"
+                role="radio"
+                class="rocker-key"
+                :class="{ 'rocker-key--active': menuBarOnlyMode }"
+                :aria-checked="menuBarOnlyMode"
+                :tabindex="menuBarOnlyMode ? 0 : -1"
+                :disabled="!isTrayModeSupported"
+                @click="setMenuBarOnlyModeEnabled(true)"
+              >
+                TRAY
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p class="settings-note">
+          {{
+            isMacPlatform
+              ? "Window close keeps Marconio in the menu bar."
+              : isWindowsPlatform
+                ? "Window close keeps Marconio in the system tray."
+              : "Tray mode available on macOS & Windows."
+          }}
+        </p>
+      </section>
 
       <PresetContextMenu
         :visible="contextMenu.visible"
