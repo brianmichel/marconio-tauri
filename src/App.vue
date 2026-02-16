@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -17,6 +17,8 @@ import LcdDisplay from "./components/receiver/LcdDisplay.vue";
 import PresetGrid from "./components/receiver/PresetGrid.vue";
 import PresetContextMenu from "./components/receiver/PresetContextMenu.vue";
 import AudioFxSegmentedControl from "./components/receiver/AudioFxSegmentedControl.vue";
+import SupportDialog from "./components/receiver/SupportDialog.vue";
+import ReceiverSettingsPanel from "./components/receiver/ReceiverSettingsPanel.vue";
 import { AUDIO_FX_PRESETS, type AudioFxPreset } from "./audio/fxPresets";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
@@ -47,7 +49,6 @@ const isLcdThemeAnimating = ref(false);
 let lcdThemeAnimationTimer: ReturnType<typeof setTimeout> | null = null;
 const isLcdTuning = ref(false);
 const supportDialogVisible = ref(true);
-const supportDialogRef = ref<HTMLElement | null>(null);
 const BLOCKED_BROWSER_SHORTCUTS = new Set(["a", "r", "+", "=", "-", "0"]);
 const IS_DEV = import.meta.env.DEV;
 const EDITABLE_TARGET_SELECTOR = [
@@ -198,8 +199,6 @@ const lcdTheme = ref<LcdTheme>(readLcdTheme());
 const audioFxPreset = ref<AudioFxPreset>(readAudioFxPreset());
 const menuBarOnlyMode = ref(readMenuBarOnlyMode());
 const settingsPanelVisible = ref(false);
-const settingsPanelRef = ref<HTMLElement | null>(null);
-const settingsCloseRef = ref<HTMLElement | null>(null);
 let settingsTriggerEl: HTMLElement | null = null;
 const isMacPlatform = ref(detectMacPlatform());
 const isWindowsPlatform = ref(detectWindowsPlatform());
@@ -550,9 +549,6 @@ function openSettingsPanel() {
   settingsPanelVisible.value = true;
   closeModelMenu();
   closeContextMenu();
-  void nextTick(() => {
-    settingsCloseRef.value?.focus();
-  });
 }
 
 function closeSettingsPanel() {
@@ -561,47 +557,7 @@ function closeSettingsPanel() {
   settingsTriggerEl = null;
 }
 
-function handleSettingsKeydown(event: KeyboardEvent) {
-  if (event.key !== "Tab") return;
-
-  const panel = settingsPanelRef.value;
-  if (!panel) return;
-
-  const focusable = Array.from(
-    panel.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ),
-  );
-  if (focusable.length === 0) return;
-
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
-}
-
-function handleRockerKeydown(event: KeyboardEvent) {
-  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-  event.preventDefault();
-  if (!isTrayModeSupported.value) return;
-
-  const next = event.key === "ArrowRight";
-  setMenuBarOnlyModeEnabled(next);
-
-  void nextTick(() => {
-    const group = (event.target as HTMLElement).closest(".setting-rocker");
-    const active = group?.querySelector<HTMLElement>('[aria-checked="true"]');
-    active?.focus();
-  });
-}
-
-function setMenuBarOnlyModeEnabled(enabled: boolean) {
+function setMenuBarOnlyMode(enabled: boolean) {
   if (!isTrayModeSupported.value) {
     return;
   }
@@ -986,131 +942,21 @@ function onGlobalKeyDown(event: KeyboardEvent) {
         <div class="footer-line" />
       </footer>
 
-      <div v-if="supportDialogVisible" class="support-backdrop" aria-hidden="true" />
-      <section
-        v-if="supportDialogVisible"
-        ref="supportDialogRef"
-        class="support-dialog"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="support-dialog-title"
-        aria-describedby="support-dialog-body"
-        @keydown.stop
-      >
-        <div class="support-dialog-lcd" aria-hidden="true">
-          <span class="support-dialog-freq">SUPPORT NTS</span>
-        </div>
-        <p id="support-dialog-body" class="support-dialog-body">
-          Marconio streams from directly from NTS, consider
-          becoming a supporter to keep independent radio alive & accessible.
-        </p>
-        <div class="support-dialog-actions">
-          <button
-            type="button"
-            class="support-dialog-btn support-dialog-btn--primary"
-            @click="openSupportersPage(); dismissSupportDialog()"
-          >
-            LEARN MORE
-          </button>
-          <button
-            type="button"
-            class="support-dialog-btn support-dialog-btn--secondary"
-            @click="dismissSupportDialog"
-          >
-            CONTINUE
-          </button>
-        </div>
-      </section>
-
-      <div
-        v-if="settingsPanelVisible"
-        class="settings-backdrop"
-        aria-hidden="true"
-        @mousedown="closeSettingsPanel"
+      <SupportDialog
+        :visible="supportDialogVisible"
+        @dismiss="dismissSupportDialog"
+        @learn-more="openSupportersPage(); dismissSupportDialog()"
       />
-      <section
-        v-if="settingsPanelVisible"
-        ref="settingsPanelRef"
-        class="settings-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="receiver-settings-title"
-        @mousedown.stop
-        @keydown="handleSettingsKeydown"
-      >
-        <header class="settings-header">
-          <div class="settings-header-rule" aria-hidden="true" />
-          <p id="receiver-settings-title" class="settings-title">SETTINGS</p>
-          <div class="settings-header-rule" aria-hidden="true" />
-          <button
-            ref="settingsCloseRef"
-            type="button"
-            class="settings-close-button"
-            aria-label="Close settings"
-            @click="closeSettingsPanel"
-          >
-            &times;
-          </button>
-        </header>
 
-        <div class="settings-list">
-          <div class="setting-row">
-            <div class="setting-label-row" id="appmode-label">
-              <p class="setting-name">APP MODE</p>
-              <p class="setting-hint" id="appmode-hint">
-                {{
-                  isMacPlatform
-                    ? "Hides Dock icon when set to tray"
-                    : isWindowsPlatform
-                      ? "Hides taskbar icon when set to tray"
-                      : "Available on macOS and Windows"
-                }}
-              </p>
-            </div>
-            <div
-              class="setting-rocker"
-              role="radiogroup"
-              aria-labelledby="appmode-label"
-              @keydown="handleRockerKeydown"
-            >
-              <button
-                type="button"
-                role="radio"
-                class="rocker-key"
-                :class="{ 'rocker-key--active': !menuBarOnlyMode }"
-                :aria-checked="!menuBarOnlyMode"
-                :tabindex="!menuBarOnlyMode ? 0 : -1"
-                :disabled="!isTrayModeSupported"
-                @click="setMenuBarOnlyModeEnabled(false)"
-              >
-                DOCK
-              </button>
-              <button
-                type="button"
-                role="radio"
-                class="rocker-key"
-                :class="{ 'rocker-key--active': menuBarOnlyMode }"
-                :aria-checked="menuBarOnlyMode"
-                :tabindex="menuBarOnlyMode ? 0 : -1"
-                :disabled="!isTrayModeSupported"
-                @click="setMenuBarOnlyModeEnabled(true)"
-              >
-                TRAY
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <p class="settings-note">
-          {{
-            isMacPlatform
-              ? "Window close keeps Marconio in the menu bar."
-              : isWindowsPlatform
-                ? "Window close keeps Marconio in the system tray."
-              : "Tray mode available on macOS & Windows."
-          }}
-        </p>
-      </section>
+      <ReceiverSettingsPanel
+        :visible="settingsPanelVisible"
+        :menu-bar-only-mode="menuBarOnlyMode"
+        :is-tray-mode-supported="isTrayModeSupported"
+        :is-mac-platform="isMacPlatform"
+        :is-windows-platform="isWindowsPlatform"
+        @close="closeSettingsPanel"
+        @set-menu-bar-only-mode="setMenuBarOnlyMode"
+      />
 
       <PresetContextMenu
         :visible="contextMenu.visible"
