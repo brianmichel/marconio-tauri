@@ -242,6 +242,7 @@ impl ShazamInner {
         self.emit_result("error", &message, None);
     }
 
+    #[cfg(target_os = "macos")]
     fn finalize_match(&self, payload: BridgeMatchPayload) {
         let source = match self.take_active_attempt_with_source() {
             Some(source) => source,
