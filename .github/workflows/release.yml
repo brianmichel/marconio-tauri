@@ -67,11 +67,16 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
         run: |
           key_file="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
-          if printf "%s" "$APPLE_API_PRIVATE_KEY" | grep -q '\\n'; then
-            printf "%b" "$APPLE_API_PRIVATE_KEY" > "$key_file"
-          else
-            printf "%s" "$APPLE_API_PRIVATE_KEY" > "$key_file"
+          if ! printf "%s" "$APPLE_API_PRIVATE_KEY" | tr -d '\r\n' | base64 -D > "$key_file" 2>/dev/null; then
+            echo "::error::APPLE_API_KEY must be base64-encoded App Store Connect .p8 key contents."
+            exit 1
           fi
+
+          if ! openssl pkey -in "$key_file" -noout >/dev/null 2>&1; then
+            echo "::error::Prepared API key file is not a valid ASN.1 private key. Check APPLE_API_KEY secret formatting."
+            exit 1
+          fi
+
           chmod 600 "$key_file"
           {
             echo "APPLE_API_KEY=${APPLE_API_KEY_ID}"
