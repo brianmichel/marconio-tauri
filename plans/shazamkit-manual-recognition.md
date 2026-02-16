@@ -68,6 +68,8 @@ Scope: macOS manual song recognition for currently playing stream, persistent hi
 - 2026-02-16: Added explicit post-build macOS notarization checks in CI (`xcrun stapler validate` for both `.app` and `.dmg`) and pinned Tauri action `projectPath` to `.`.
 - 2026-02-16: Hardened CI API key prep to validate ASN.1 private key formatting (`openssl pkey`) and support raw or base64 `.p8` secrets to prevent `invalidAsn1` notarization failures.
 - 2026-02-16: Simplified CI API key prep to a single macOS base64 decode path (`base64 -D`) with ASN.1 validation; `APPLE_API_KEY` now expected as base64-encoded `.p8` content.
+- 2026-02-16: Made notarization verification path-agnostic by discovering `.dmg`/`.app` under `src-tauri/target/**/bundle/*`; DMG stapling is required, app stapling is validated when present.
+- 2026-02-16: Fixed release env propagation bug by removing `${{ env.APPLE_API_KEY* }}` overrides in `tauri-action` step so runtime vars from `$GITHUB_ENV` are preserved for notarization.
 
 ## Change Protocol
 - I will update this file whenever:
