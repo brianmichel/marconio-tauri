@@ -18,6 +18,7 @@ import PresetGrid from "./components/receiver/PresetGrid.vue";
 import PresetContextMenu from "./components/receiver/PresetContextMenu.vue";
 import AudioFxSegmentedControl from "./components/receiver/AudioFxSegmentedControl.vue";
 import { AUDIO_FX_PRESETS, type AudioFxPreset } from "./audio/fxPresets";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 const client = createNTSClient();
 const STORAGE_KEY = "nts-user-presets-v1";
@@ -45,6 +46,8 @@ const isPlaying = ref(false);
 const isLcdThemeAnimating = ref(false);
 let lcdThemeAnimationTimer: ReturnType<typeof setTimeout> | null = null;
 const isLcdTuning = ref(false);
+const supportDialogVisible = ref(true);
+const supportDialogRef = ref<HTMLElement | null>(null);
 const BLOCKED_BROWSER_SHORTCUTS = new Set(["a", "r", "+", "=", "-", "0"]);
 const IS_DEV = import.meta.env.DEV;
 const EDITABLE_TARGET_SELECTOR = [
@@ -532,6 +535,16 @@ function closeModelMenu() {
   modelMenuVisible.value = false;
 }
 
+function dismissSupportDialog() {
+  supportDialogVisible.value = false;
+}
+
+function openSupportersPage() {
+  void openUrl("https://www.nts.live/supporters").catch(() => {
+    window.open("https://www.nts.live/supporters", "_blank");
+  });
+}
+
 function openSettingsPanel() {
   settingsTriggerEl = document.activeElement as HTMLElement | null;
   settingsPanelVisible.value = true;
@@ -812,6 +825,10 @@ onBeforeUnmount(() => {
 });
 
 function onGlobalKeyDown(event: KeyboardEvent) {
+  if (supportDialogVisible.value) {
+    return;
+  }
+
   const editable = isEditableTarget(event.target);
   const key = event.key.toLowerCase();
   const hasPrimaryModifier = event.metaKey || event.ctrlKey;
@@ -968,6 +985,42 @@ function onGlobalKeyDown(event: KeyboardEvent) {
         <p class="tagline">STREAMING RECEIVER</p>
         <div class="footer-line" />
       </footer>
+
+      <div v-if="supportDialogVisible" class="support-backdrop" aria-hidden="true" />
+      <section
+        v-if="supportDialogVisible"
+        ref="supportDialogRef"
+        class="support-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="support-dialog-title"
+        aria-describedby="support-dialog-body"
+        @keydown.stop
+      >
+        <div class="support-dialog-lcd" aria-hidden="true">
+          <span class="support-dialog-freq">SUPPORT NTS</span>
+        </div>
+        <p id="support-dialog-body" class="support-dialog-body">
+          Marconio streams from directly from NTS, consider
+          becoming a supporter to keep independent radio alive & accessible.
+        </p>
+        <div class="support-dialog-actions">
+          <button
+            type="button"
+            class="support-dialog-btn support-dialog-btn--primary"
+            @click="openSupportersPage(); dismissSupportDialog()"
+          >
+            LEARN MORE
+          </button>
+          <button
+            type="button"
+            class="support-dialog-btn support-dialog-btn--secondary"
+            @click="dismissSupportDialog"
+          >
+            CONTINUE
+          </button>
+        </div>
+      </section>
 
       <div
         v-if="settingsPanelVisible"
